@@ -1,5 +1,44 @@
 import { expect, test } from "@playwright/test";
 
+test("open plaza route returns to the line around a fountain", async ({
+  page,
+}) => {
+  await page.route("https://tile.openstreetmap.org/**", (route) =>
+    route.abort(),
+  );
+  const parameters = {
+    start: { lat: 51.54, lon: -0.1 },
+    bearing: 90,
+    distance_m: 1000,
+    max_deviation_m: 25,
+    strict: false,
+    allow_unverified_crossings: false,
+  };
+  await page.goto(
+    `/?mission=${encodeURIComponent(JSON.stringify(parameters))}`,
+  );
+  const completed = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/missions/analyse") &&
+      response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "Analyse mission" }).click();
+  const result = await (await completed).json();
+  expect(result.mission.max_deviation_m).toBeLessThan(25);
+  expect(result.mission.within_percent["10"]).toBeGreaterThan(85);
+  await expect(
+    page.getByText("A route with unknowns", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Planned mission grade" })
+      .locator(".grade-badge"),
+  ).toHaveText("Platinum");
+  await page.locator(".verification-list summary").click();
+  await page.getByRole("button", { name: /Browser test plaza/ }).click();
+  await expect(page.locator(".map-legend")).toContainText("To verify");
+});
+
 test("relaxed planning locates crossing checks and can disable proposals", async ({
   page,
 }) => {
@@ -48,11 +87,9 @@ test("relaxed planning locates crossing checks and can disable proposals", async
   await expect(
     page.getByText("Best available mission route", { exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("region", { name: "Planned mission grade" })
-    .screenshot({
-      path: `test-results/best-effort-grade-${test.info().project.name}.png`,
-    });
+  await page.getByRole("region", { name: "Planned mission grade" }).screenshot({
+    path: `test-results/best-effort-grade-${test.info().project.name}.png`,
+  });
 });
 
 test("bounded discovery selects a real analysed candidate", async ({

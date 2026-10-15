@@ -4,11 +4,11 @@ This records observed results in the prepared cloud instance, not a claim that a
 
 | Check | Observed result |
 | --- | --- |
-| Backend pytest | **89 passed**, no failures; one Starlette/httpx test-client deprecation warning |
+| Backend pytest | **108 passed**, no failures; one Starlette/httpx test-client deprecation warning |
 | Ruff | Passed for application, tests and live-check script |
 | Frontend Vitest | **9 passed** in three files |
 | TypeScript + Vite production build | Passed; MapLibre and its module worker are bundled separately |
-| Playwright desktop + mobile | **18 passed**: planning/analysis/grades/best-effort routing, on-site checks and crossing proposals, saving/sharing/GPX export, global search/map selection/layers/help, discovery, and development startup/worker regressions |
+| Playwright desktop + mobile | **20 passed**: planning/analysis/grades/best-effort routing, line-following plaza/fountain detours, on-site checks and crossing proposals, saving/sharing/GPX export, global search/map selection/layers/help, discovery, and development startup/worker regressions |
 | Production host API | Health, HTML root, OpenAPI docs, geodesic preview and real OSM analysis served successfully |
 | Install repeatability | Executed the saved frozen uv/npm setup and build script successfully after initial installation; lockfiles unchanged |
 | Docker Compose | Configuration validated |
@@ -79,3 +79,13 @@ All **87 backend tests**, Ruff, **7 frontend tests**, the TypeScript/Vite build 
 ## Older API diagnostic
 
 The screenshot's **Extra inputs are not permitted** error was reproduced by validating the current frontend payload against the preceding API schema: the rejected field was `allow_unverified_crossings`. The current API accepted the same Adelaide preview request with HTTP 200. The frontend now identifies this specific older-schema response and explains that the API must be restarted from the updated backend folder. It preserves ordinary validation errors and does not silently drop the crossing option. Regression checks cover both boolean values and continued rejection of genuinely unknown inputs. **89 backend tests**, **9 frontend tests**, Ruff and the TypeScript/Vite build passed for this follow-up.
+
+## Victoria Square line-following correction
+
+The next shared Adelaide mission was reproduced with **13,237 live OSM features**. Its initial mission had **195.73 m maximum deviation**, **61.47 m average deviation** and length **2,266.38 m**. Inspection found mapped crossing nodes tagged `barrier=kerb, kerb=lowered/flush` were incorrectly excluded. Separately, the previous distance tie-break allowed unnecessary local wandering when a larger bottleneck elsewhere fixed the maximum; open-space generation also omitted pedestrian plazas and parks lacking explicit access tags.
+
+Mapped lowered/flush kerbs now preserve footway connectivity. Unknown kerbs remain on-site checks in relaxed mode, while restrictions/locked barriers still block. A passable kerb does not create an opening in an intersecting fence. Mission optimisation now minimises accumulated deviation after the primary maximum-deviation bound, with distance as a later tie-break. The open-space mesh adds ideal-line points and obstacle steering points, samples dense spaces, avoids fountain/water/road/rail/fence/building geometry, and identifies exploratory sections for verification. Polygon boundaries are no longer treated as mapped paths.
+
+A final live query using the expanded fountain/pool selectors returned **13,246 features**. The corrected mission is **2,106.09 m** long, with **88.42 m maximum deviation** and **24.41 m average deviation**, within the original ±100 m target and graded **Bronze**. Maximum deviation across the southern Victoria Square comparison window fell from **69.83 m to 35.67 m**. No source mapping was edited to force this result; the data/geometry still require on-site verification.
+
+Verification: **108 backend tests**, Ruff, **9 frontend tests**, TypeScript/Vite build and **20 desktop/mobile browser checks** passed. New regressions cover lowered/flush kerbs and explicit restrictions, unknown-kerb checks, minimax ties that prefer a longer/closer route, full-geometry deviation integration, parks/plazas without explicit access tags, dense polygons, a 25 km open-space mesh, fountain detours returning to the line, and exclusion of private/farmland/raised areas and complete fence/rail obstructions. Browser tests analyse and grade the real test API's synthetic plaza/fountain route and locate its verification section. Native Windows and physical access were not tested.

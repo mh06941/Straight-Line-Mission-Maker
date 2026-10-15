@@ -55,7 +55,8 @@ class OSMProvider:
             raise ValueError(
                 f"Requested OSM area exceeds {MAX_QUERY_AREA_KM2:g} km². Shorten the mission or narrow the search."
             )
-        key = "osm:" + hashlib.sha256(json.dumps(boxes, sort_keys=True).encode()).hexdigest()
+        # Versioned selector set: older cached regions may lack plaza fountains/pools.
+        key = "osm:v2:" + hashlib.sha256(json.dumps(boxes, sort_keys=True).encode()).hexdigest()
         hit = storage.cache_get(key)
         if hit:
             return {"elements": hit[0]["elements"], "fetched_at": hit[1], "cached": True}
@@ -76,6 +77,8 @@ class OSMProvider:
                     "way[natural=water]",
                     "way[landuse]",
                     "way[leisure=park]",
+                    "way[amenity=fountain]",
+                    "way[leisure=swimming_pool]",
                     "way[railway]",
                     "way[access]",
                     "node[barrier]",

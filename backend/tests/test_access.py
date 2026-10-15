@@ -26,9 +26,11 @@ def test_locked_gate_removes_adjacent_edges(mission):
 
 
 @pytest.mark.parametrize(
-    "permission,blocker,connected", [(True, False, True), (False, False, False), (True, True, False)]
+    "permission,blocker,connected", [(True, False, True), (False, False, True), (True, True, False)]
 )
-def test_open_space_links_require_access_and_avoid_obstacles(mission, permission, blocker, connected):
+def test_open_space_proposals_allow_missing_access_and_avoid_obstacles(
+    mission, permission, blocker, connected
+):
     geo = MissionGeometry(mission)
     elements = [
         {
@@ -57,7 +59,7 @@ def test_open_space_links_require_access_and_avoid_obstacles(mission, permission
             {
                 "type": "way",
                 "id": 4,
-                "geometry": geometry(geo, [(0, -40), (0, 40)]),
+                "geometry": geometry(geo, [(0, -60), (0, 60)]),
                 "tags": {"barrier": "fence"},
             }
         )

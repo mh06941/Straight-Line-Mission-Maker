@@ -16,6 +16,41 @@ geo = MissionGeometry(MissionRequest(start={"lat": 51.5, "lon": -0.1}, bearing=9
 
 
 async def region(boxes):
+    if min(box[0] for box in boxes) > 51.525:
+        plaza_geo = MissionGeometry(
+            MissionRequest(start={"lat": 51.54, "lon": -0.1}, bearing=90, distance_m=1000)
+        )
+
+        def shape(identifier, nodes, points, tags):
+            return {
+                "type": "way",
+                "id": identifier,
+                "nodes": nodes,
+                "geometry": [
+                    {"lon": lon, "lat": lat}
+                    for lon, lat in (plaza_geo.inverse.transform(*point) for point in points)
+                ],
+                "tags": tags,
+            }
+
+        return {
+            "elements": [
+                shape(
+                    1,
+                    [1, 2, 3, 4, 1],
+                    [(-550, -80), (550, -80), (550, 80), (-550, 80), (-550, -80)],
+                    {"highway": "pedestrian", "area": "yes", "name": "Browser test plaza"},
+                ),
+                shape(
+                    2,
+                    [5, 6, 7, 8, 5],
+                    [(-15, -15), (15, -15), (15, 15), (-15, 15), (-15, -15)],
+                    {"amenity": "fountain"},
+                ),
+            ],
+            "fetched_at": time.time(),
+            "cached": False,
+        }
     if min(box[0] for box in boxes) > 51.505:
         crossing_geo = MissionGeometry(
             MissionRequest(start={"lat": 51.52, "lon": -0.1}, bearing=90, distance_m=1000)

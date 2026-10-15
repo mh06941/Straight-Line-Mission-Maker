@@ -40,7 +40,12 @@ export interface Route {
 }
 export interface VerificationSection {
   id: string;
-  kind: "road_crossing" | "indoor_passage" | "open_space" | "access_unknown";
+  kind:
+    | "road_crossing"
+    | "indoor_passage"
+    | "open_space"
+    | "access_unknown"
+    | "barrier";
   name: string;
   reason: string;
   distance_m: number;

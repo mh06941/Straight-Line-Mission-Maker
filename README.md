@@ -11,8 +11,8 @@ Choose endpoints or a bearing and distance, preview a WGS84 geodesic and deviati
 - Accurate WGS84 distances/bearings; densified ideal geodesic; route-centered metric projection that crosses UTM zones and supports polar and antimeridian calculations.
 - Bounded Overpass retrieval with disk caching, serialization, rate limiting, retries, timeouts and provider-failure messages. No synthetic production-data fallback.
 - OSM-node-based pedestrian topology; access filtering, conservative barrier handling, edge snapping with explicitly unassessed endpoint gaps.
-- Two-pass bottleneck routing: smallest modelled maximum deviation, followed by shortest distance and access-confidence tie-breaking. The requested corridor is a target: a best-effort mission remains available when it exceeds that target, with the excess labelled.
-- Relaxed routing admits uncertain paths and bounded visibility connections inside explicitly accessible open-space polygons, avoiding mapped obstacles. These links remain unverified.
+- Mission routing minimises the modelled maximum deviation first, then accumulated deviation along the route, with distance and access-confidence tie-breaking. This favours returning to the line between necessary detours. The requested corridor is a target: a best-effort mission remains available when it exceeds that target, with the excess labelled.
+- Relaxed routing admits uncertain paths and bounded visibility connections through parks and pedestrian plazas, avoiding mapped obstacles. Missing access tags produce proposals for on-site checks; explicit restrictions still apply. Line-following points and obstacle corners support direct crossings and small detours instead of following area perimeters.
 - Relaxed mode also supports mapped indoor passages and optional short road-crossing proposals. Orange dashed sections and a locatable on-site checklist identify what needs confirmation.
 - Mapped obstacle intersections, feature layers, distance-weighted deviation statistics, corridor percentages and partial difficulty with an explicit formula.
 - Planned maximum-deviation grades from Diamond to Bronze, plus Out of grade, with threshold guidance and export metadata.
@@ -94,7 +94,7 @@ Use the Local address printed by Vite and hard-refresh with Ctrl+Shift+R. Subseq
 1. Search a place and submit, or enter `latitude, longitude`. Search moves the map; it does not choose a mission endpoint.
 2. Open **Plan a mission**, press a crosshair and click the map. Choose the finish the same way, or switch to bearing/distance.
 3. Choose your target maximum deviation **on each side** of the ideal line. Preview and ideal-line exports work without OSM connectivity.
-4. Select **Analyse mission**. Strict mode requires supporting pedestrian tags; generic unclassified access is omitted. Turning **Mapped paths only** off includes uncertain ways, mapped indoor passages and eligible open-space links. **Propose road crossings to verify** adds short tentative crossings between nearby mapped paths.
+4. Select **Analyse mission**. Strict mode requires supporting pedestrian tags; generic unclassified access is omitted. Turning **Mapped paths only** off includes uncertain ways, mapped indoor passages and open-space proposals through parks and pedestrian plazas. **Propose road crossings to verify** adds short tentative crossings between nearby mapped paths. Mapped lowered/flush kerbs preserve crossing connections; kerbs of unknown height become on-site checks in relaxed mode.
 5. Inspect **Overview**, **Obstacles**, and **Data & access**. Snapped endpoint gaps are outside the route geometry and statistics; check them independently.
 6. Save, share or export. Browser saves retain parameters, not a promise that a route will remain accessible.
 

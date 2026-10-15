@@ -405,7 +405,7 @@ export default function App() {
             <small>
               {strict
                 ? "Supporting pedestrian-access evidence required"
-                : "Allow uncertain ways, indoor passages and public-space links"}
+                : "Allow uncertain ways, indoor passages and open-space proposals"}
             </small>
           </span>
         </span>
@@ -1278,9 +1278,10 @@ export default function App() {
                     A ±50 m corridor permits 50 m of deviation on either side.
                     The red line is a WGS84 geodesic; the blue route is shortest
                     by distance without a corridor constraint; the green route
-                    minimises its greatest deviation before breaking ties by
-                    distance. If it exceeds your target, it remains visible with
-                    the excess labelled.
+                    minimises its greatest deviation, then stays close to the
+                    line between detours. Distance breaks remaining ties. If it
+                    exceeds your target, it remains visible with the excess
+                    labelled.
                   </p>
                 </section>
               </div>
@@ -1291,11 +1292,12 @@ export default function App() {
                   <p>
                     Strict mode requires supporting pedestrian-access tags.
                     Relaxed mode admits unknown ways, mapped indoor passages and
-                    limited links inside explicitly accessible open spaces.
-                    Optional road-crossing proposals and other uncertain
-                    sections appear as orange dashes with locations to check on
-                    site. Endpoint gaps, missing fences and access changes
-                    require checking on the ground.
+                    proposals through parks and pedestrian plazas, including
+                    spaces with missing access tags. Optional road-crossing
+                    proposals and other uncertain sections appear as orange
+                    dashes with locations to check on site. Endpoint gaps,
+                    missing fences and access changes require checking on the
+                    ground.
                   </p>
                 </section>
               </div>

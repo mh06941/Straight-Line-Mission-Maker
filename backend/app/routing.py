@@ -1,4 +1,4 @@
-"""OSM topology and a two-pass bottleneck-then-distance optimizer.
+"""OSM topology and a two-pass bottleneck-then-closeness optimizer.
 
 Mapped ways connect through shared traversable OSM nodes. Relaxed mode can add
 separately labelled, unverified road-crossing proposals between nearby paths.
@@ -13,7 +13,7 @@ from shapely import STRtree
 from shapely.geometry import Point, Polygon
 from shapely.ops import nearest_points, unary_union
 
-from .geo import GEOD, densify, geodesic_length
+from .geo import GEOD, densify
 
 FOOT_HIGHWAYS = {
     "footway",
@@ -81,23 +81,39 @@ def access_class(tags):
     return "uncertain"
 
 
-def barrier_passable(tags):
+def barrier_class(tags):
     if tags.get("locked") == "yes" or tags.get("foot") in DENIED or tags.get("access") in DENIED:
-        return False
-    return tags.get("barrier") in PASSABLE and tags.get("foot") in EXPLICIT_FOOT
+        return "blocked"
+    if tags.get("barrier") == "kerb":
+        return (
+            "mapped"
+            if tags.get("kerb") in {"lowered", "flush", "no"} or tags.get("foot") in EXPLICIT_FOOT
+            else "uncertain"
+        )
+    return "mapped" if tags.get("barrier") in PASSABLE and tags.get("foot") in EXPLICIT_FOOT else "blocked"
+
+
+def barrier_passable(tags):
+    return barrier_class(tags) == "mapped"
 
 
 def add_edge(graph, a, b, coords, geo, *, access, tags, way_id, off_path=False):
     samples = densify(coords)
-    length = geodesic_length(samples)
+    lengths = [GEOD.inv(*start, *end)[2] for start, end in zip(samples, samples[1:])]
+    length = sum(lengths)
     if length <= 0:
         return
-    deviation = max(geo.deviation(p) for p in samples) + 0.05
+    deviations = [geo.deviation(point) for point in samples]
+    deviation = max(deviations) + 0.05
+    integral = sum(
+        (start + end) / 2 * segment for start, end, segment in zip(deviations, deviations[1:], lengths)
+    )
     graph.add_edge(
         a,
         b,
         length=length,
         deviation=deviation,
+        deviation_integral_m2=integral,
         coords=coords,
         access=access,
         tags=tags,
@@ -136,7 +152,12 @@ def build_graph(elements, geo, strict=True, *, allow_unverified_crossings=False)
     gate_buffers = []
     for element in elements:
         tags = element.get("tags", {})
-        if element.get("type") == "node" and "lon" in element and barrier_passable(tags):
+        if (
+            element.get("type") == "node"
+            and "lon" in element
+            and tags.get("barrier") in PASSABLE
+            and barrier_passable(tags)
+        ):
             gate_buffers.append(Point(geo.forward.transform(element["lon"], element["lat"])).buffer(2))
         coords = [(p["lon"], p["lat"]) for p in element.get("geometry", [])]
         if len(coords) < 2:
@@ -147,7 +168,7 @@ def build_graph(elements, geo, strict=True, *, allow_unverified_crossings=False)
             kind = "restricted"
         elif closed and tags.get("building") not in {None, "no"}:
             kind = "building"
-        elif closed and tags.get("natural") == "water":
+        elif closed and water_obstacle(tags):
             kind = "water"
         elif tags.get("barrier") in {"fence", "wall", "hedge", "retaining_wall"}:
             kind = "barrier"
@@ -163,6 +184,10 @@ def build_graph(elements, geo, strict=True, *, allow_unverified_crossings=False)
         tags = way.get("tags", {})
         if way.get("type") != "way" or tags.get("highway") not in FOOT_HIGHWAYS or "nodes" not in way:
             continue
+        if tags.get("area") == "yes":
+            # A plaza boundary describes an area, not a mapped walking path.
+            # Its interior is handled by the obstacle-aware exploratory mesh.
+            continue
         access = access_class(tags)
         passage = indoor_passage(tags)
         if passage and access != "blocked":
@@ -174,12 +199,8 @@ def build_graph(elements, geo, strict=True, *, allow_unverified_crossings=False)
         if len(nodes) != len(geometry):
             continue
         for i, (a, b) in enumerate(zip(nodes, nodes[1:])):
-            if (
-                a in barriers
-                and not barrier_passable(barriers[a])
-                or b in barriers
-                and not barrier_passable(barriers[b])
-            ):
+            node_access = [barrier_class(barriers[node]) for node in (a, b) if node in barriers]
+            if "blocked" in node_access or strict and "uncertain" in node_access:
                 continue
             coords = [(geometry[j]["lon"], geometry[j]["lat"]) for j in (i, i + 1)]
             # Full Overpass ways can extend beyond the query region. Keep the local model bounded.
@@ -210,7 +231,17 @@ def build_graph(elements, geo, strict=True, *, allow_unverified_crossings=False)
                 continue
             for node, coord in zip((a, b), coords):
                 graph.add_node(node, coord=coord)
-            add_edge(graph, a, b, coords, geo, access=access, tags=tags, way_id=way["id"])
+            edge_tags = {**tags, "verification:barrier": "kerb"} if "uncertain" in node_access else tags
+            add_edge(
+                graph,
+                a,
+                b,
+                coords,
+                geo,
+                access="uncertain" if "uncertain" in node_access else access,
+                tags=edge_tags,
+                way_id=way["id"],
+            )
     off_path_count = 0
     crossing_count = 0
     if not strict:
@@ -264,7 +295,10 @@ def add_road_crossing_proposals(graph, elements, geo, hazards):
     eligible = []
     for node, data in graph.nodes(data=True):
         edges = [edge for group in graph[node].values() for edge in group.values()]
-        if not any(edge["tags"].get("highway") in PEDESTRIAN_WAYS for edge in edges):
+        if not any(
+            edge["tags"].get("highway") in PEDESTRIAN_WAYS or edge["tags"].get("connection") == "open_space"
+            for edge in edges
+        ):
             continue
         if any(not at_ground_level(edge["tags"]) or indoor_passage(edge["tags"]) for edge in edges):
             continue
@@ -314,66 +348,133 @@ def add_road_crossing_proposals(graph, elements, geo, hazards):
     return min(len(proposals), 1000)
 
 
-def add_open_space_connections(graph, elements, geo):
-    """Bounded visibility edges inside explicitly accessible polygons, always uncertain.
+def water_obstacle(tags):
+    return (
+        tags.get("natural") == "water"
+        or tags.get("landuse") in {"basin", "reservoir"}
+        or tags.get("amenity") == "fountain"
+        or tags.get("leisure") == "swimming_pool"
+    )
 
-    Multipolygon relations are deliberately not inferred from disconnected member ways.
-    Fences/water/buildings/restricted polygons block links even inside public parks.
+
+def evenly_spaced(items, limit):
+    if len(items) <= limit:
+        return items
+    return [items[round(index * (len(items) - 1) / (limit - 1))] for index in range(limit)]
+
+
+def geometry_parts(geometry, kind):
+    if geometry.is_empty:
+        return []
+    if geometry.geom_type == kind:
+        return [geometry]
+    return [part for child in getattr(geometry, "geoms", []) for part in geometry_parts(child, kind)]
+
+
+def add_open_space_connections(graph, elements, geo):
+    """Bounded exploratory visibility meshes in parks and pedestrian plazas.
+
+    Include line-following points and obstacle corners, so the planner can
+    return to the line instead of being restricted to mapped perimeter nodes.
+    Missing access tags remain an on-site check; explicit restrictions block.
     """
-    blockers = []
-    spaces = []
+    blockers, spaces = [], []
     for element in elements:
         tags = element.get("tags", {})
         if element.get("type") == "node" and "barrier" in tags and not barrier_passable(tags):
             if "lon" in element:
                 blockers.append(Point(geo.forward.transform(element["lon"], element["lat"])).buffer(2))
-        coords = [(p["lon"], p["lat"]) for p in element.get("geometry", [])]
+        coords = [(point["lon"], point["lat"]) for point in element.get("geometry", [])]
         if len(coords) < 2:
             continue
-        projected = geo.project(coords)
+        line = geo.project(coords)
         closed = len(coords) >= 4 and coords[0] == coords[-1]
-        poly = Polygon(projected.coords) if closed else None
+        poly = Polygon(line.coords) if closed else None
         if poly is not None and not poly.is_valid:
             continue
+        restricted = (
+            tags.get("foot") in DENIED
+            or tags.get("access") in DENIED
+            and tags.get("foot") not in EXPLICIT_FOOT
+        )
+        open_space = (
+            tags.get("leisure") in {"park", "common", "recreation_ground"}
+            or tags.get("landuse") == "recreation_ground"
+            or tags.get("highway") in {"pedestrian", "footway"}
+            and tags.get("area") == "yes"
+        )
+        if poly is not None and open_space and not restricted and at_ground_level(tags):
+            spaces.append((element["id"], poly, tags))
         if (
-            (
-                tags.get("leisure") in {"park", "common", "recreation_ground"}
-                or tags.get("landuse") == "recreation_ground"
-            )
-            and closed
-            and tags.get("foot") not in DENIED
-        ):
-            if tags.get("foot") in EXPLICIT_FOOT or tags.get("access") in {"yes", "permissive", "designated"}:
-                if tags.get("access") not in DENIED or tags.get("foot") in EXPLICIT_FOOT:
-                    spaces.append(poly)
-        if (
-            "building" in tags
+            tags.get("building") not in {None, "no"}
             or "barrier" in tags
             or "waterway" in tags
-            or tags.get("natural") == "water"
-            or tags.get("access") in DENIED
+            or water_obstacle(tags)
+            or restricted
             or "railway" in tags
+            and tags.get("railway") not in {"abandoned", "razed", "dismantled"}
+            or tags.get("highway") in CROSSABLE_ROADS
+            or tags.get("highway") in {"motorway", "trunk", "motorway_link", "trunk_link"}
         ):
-            blockers.append(poly if poly is not None else projected.buffer(1))
-    additions = 0
-    for space in spaces[:20]:
-        inside = [
-            (n, d["coord"])
-            for n, d in graph.nodes(data=True)
-            if space.covers(Point(geo.forward.transform(*d["coord"])))
-        ]
-        # Refuse undersampled large spaces rather than creating arbitrary cross-country links.
-        if len(inside) > 60:
+            # Road/rail lines remain obstacles for a park mesh; crossings use
+            # their mapped connections or the separately marked road proposals.
+            blockers.append(poly if poly is not None else line.buffer(1))
+    blocker_tree = STRtree(blockers)
+    mapped_nodes = []
+    for node, data in graph.nodes(data=True):
+        edges = [edge for group in graph[node].values() for edge in group.values()]
+        if any(not at_ground_level(edge["tags"]) or indoor_passage(edge["tags"]) for edge in edges):
             continue
-        for i, (a, ca) in enumerate(inside):
-            for b, cb in inside[i + 1 :]:
-                link = geo.project(densify([ca, cb], 10))
-                if (
-                    link.length > 250
-                    or not space.covers(link)
-                    or any(link.intersects(obstacle) for obstacle in blockers)
-                ):
+        mapped_nodes.append((node, Point(geo.forward.transform(*data["coord"]))))
+    node_tree = STRtree([point for _, point in mapped_nodes])
+    additions = 0
+    spaces.sort(key=lambda item: (geo.line.distance(item[1]), item[0]))
+    for identifier, space, tags in spaces[:20]:
+        local = [blockers[index] for index in blocker_tree.query(space, predicate="intersects")]
+        free = space.difference(unary_union(local).buffer(0.5)) if local else space
+        if free.is_empty:
+            continue
+        inside = [mapped_nodes[index] for index in node_tree.query(free, predicate="covers")]
+        inside.sort(key=lambda item: (geo.line.project(item[1]), geo.line.distance(item[1]), str(item[0])))
+        anchors = evenly_spaced(inside, 64)
+        line_points = []
+        for part in geometry_parts(geo.line.intersection(free), "LineString"):
+            count = max(1, math.ceil(part.length / 20))
+            line_points.extend(part.interpolate(part.length * index / count) for index in range(count + 1))
+        for index, point in enumerate(evenly_spaced(line_points, 128)):
+            anchors.append((("open-line", identifier, index), point))
+        # Offset steering points into free ground to avoid grazing water,
+        # buildings and fence buffers at a polygon corner.
+        inner = free.buffer(-0.2)
+        corners = []
+        if not inner.is_empty:
+            for polygon in geometry_parts(free, "Polygon"):
+                rings = [polygon.exterior, *polygon.interiors]
+                for ring in rings:
+                    for coordinate in ring.simplify(0.3).coords:
+                        point = nearest_points(Point(coordinate), inner)[1]
+                        corners.append(point)
+        corners.sort(key=lambda point: (geo.line.distance(point), geo.line.project(point)))
+        for index, point in enumerate(evenly_spaced(corners, 32)):
+            anchors.append((("open-corner", identifier, index), point))
+        unique, seen = [], set()
+        for node, point in anchors:
+            key = (round(point.x, 1), round(point.y, 1))
+            if key not in seen:
+                unique.append((node, point))
+                seen.add(key)
+        allowed = free.buffer(0.02)  # Projection round-off at polygon boundaries, in metres.
+        for index, (a, first) in enumerate(unique):
+            for b, second in unique[index + 1 :]:
+                if graph.has_edge(a, b) or not 0.1 < first.distance(second) <= 250:
                     continue
+                ca = graph.nodes[a]["coord"] if a in graph else geo.inverse.transform(first.x, first.y)
+                cb = graph.nodes[b]["coord"] if b in graph else geo.inverse.transform(second.x, second.y)
+                link = geo.project(densify([ca, cb], 10))
+                if not allowed.covers(link):
+                    continue
+                graph.add_node(a, coord=ca)
+                graph.add_node(b, coord=cb)
                 add_edge(
                     graph,
                     a,
@@ -381,7 +482,7 @@ def add_open_space_connections(graph, elements, geo):
                     [ca, cb],
                     geo,
                     access="uncertain",
-                    tags={"connection": "open_space"},
+                    tags={"connection": "open_space", "name": tags.get("name", "Open-space crossing")},
                     way_id=None,
                     off_path=True,
                 )
@@ -434,7 +535,7 @@ def snap_endpoint(graph, coordinate, geo, name):
 
 
 def bottleneck(graph, start, end):
-    """First minimize max edge deviation. A second pass resolves distance ties globally."""
+    """Minimize max edge deviation; additive tie-breaks are solved in a second pass."""
     values = {start: 0.0}
     serial = 0
     queue = [(0.0, serial, start)]
@@ -454,15 +555,16 @@ def bottleneck(graph, start, end):
     return None
 
 
-def shortest_edges(graph, start, end, max_deviation=math.inf, *, include_proposals=True):
-    # Minimize length first, then uncertain length, within the optimal bottleneck subgraph.
-    best = {start: (0.0, 0.0)}
+def shortest_edges(graph, start, end, max_deviation=math.inf, *, include_proposals=True, prefer_line=False):
+    # Mission routes first minimize accumulated distance from the line within
+    # the optimal bottleneck subgraph. Walking comparisons minimize length.
+    best = {start: (0.0, 0.0, 0.0)}
     previous = {}
-    queue = [(0.0, 0.0, 0, start)]
+    queue = [(0.0, 0.0, 0.0, 0, start)]
     serial = 0
     while queue:
-        length, uncertain, _, node = heapq.heappop(queue)
-        if (length, uncertain) != best.get(node):
+        deviation_cost, length, uncertain, _, node = heapq.heappop(queue)
+        if (deviation_cost, length, uncertain) != best.get(node):
             continue
         if node == end:
             route = []
@@ -478,10 +580,11 @@ def shortest_edges(graph, start, end, max_deviation=math.inf, *, include_proposa
                 if edge["deviation"] > max_deviation + 1e-8:
                     continue
                 candidate = (
+                    deviation_cost + (edge["deviation_integral_m2"] if prefer_line else 0),
                     length + edge["length"],
                     uncertain + (edge["length"] if edge["access"] != "mapped" else 0),
                 )
-                if candidate < best.get(neighbor, (math.inf, math.inf)):
+                if candidate < best.get(neighbor, (math.inf, math.inf, math.inf)):
                     best[neighbor] = candidate
                     previous[neighbor] = (node, key)
                     serial += 1
@@ -517,8 +620,10 @@ def route_stats(edges, graph, geo):
             elif connection == "open_space":
                 kind, reason = (
                     "open_space",
-                    "Proposed open-space link: confirm the ground and passage on site.",
+                    "Proposed open-space link: confirm access, surface and passage on site.",
                 )
+            elif tags.get("verification:barrier") == "kerb":
+                kind, reason = "barrier", "Check the kerb height and footing on site."
             else:
                 kind, reason = (
                     "access_unknown",
@@ -526,9 +631,11 @@ def route_stats(edges, graph, geo):
                 )
             name = tags.get(
                 "name",
-                {"indoor_passage": "Indoor passage", "open_space": "Open-space connection"}.get(
-                    kind, "Mapped path"
-                ),
+                {
+                    "indoor_passage": "Indoor passage",
+                    "open_space": "Open-space connection",
+                    "barrier": "Kerb crossing",
+                }.get(kind, "Mapped path"),
             )
             signature = (data["way_id"], kind, name)
             if previous_check == signature:

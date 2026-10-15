@@ -6,7 +6,7 @@ from shapely.geometry import LineString, Point, Polygon, mapping
 from .config import NUMERICAL_TOLERANCE_M
 from .geo import MissionGeometry
 from .grading import grade_deviation
-from .routing import bottleneck, build_graph, route_stats, shortest_edges, snap_endpoint
+from .routing import bottleneck, build_graph, route_stats, shortest_edges, snap_endpoint, water_obstacle
 
 
 def features_and_obstacles(elements, geo):
@@ -33,7 +33,7 @@ def features_and_obstacles(elements, geo):
             kind = "building"
         elif "barrier" in tags:
             kind = "barrier"
-        elif "waterway" in tags or tags.get("natural") in {"water", "wetland"}:
+        elif "waterway" in tags or water_obstacle(tags) or tags.get("natural") == "wetland":
             kind = "water"
         elif "railway" in tags:
             kind = "railway"
@@ -208,7 +208,7 @@ def analyse(request, data=None, provider_error=None):
             "The eligible walking network is disconnected. No route found in the downloaded area; a route outside it may exist."
         )
         return result
-    edges = shortest_edges(graph, start, end, optimum)
+    edges = shortest_edges(graph, start, end, optimum, prefer_line=True)
     route = route_stats(edges, graph, geo)
     result["mission"] = route
     result["planned_grade"] = grade_deviation(route["max_deviation_m"])
