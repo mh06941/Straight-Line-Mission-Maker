@@ -171,13 +171,16 @@ docs/              algorithms, limitations, deployment and validation evidence
 | --- | --- | --- |
 | `OSM_USER_AGENT` | StraightLine project identifier | Identify requests; use a deployment contact for production |
 | `OVERPASS_URL` | `https://overpass-api.de/api/interpreter` | OSM feature/network data |
+| `OVERPASS_FALLBACK_URLS` | `https://overpass.private.coffee/api/interpreter` for the default provider; empty for a custom `OVERPASS_URL` | Comma-separated mirrors for transient failures; set empty to disable |
 | `GEOCODE_URL` | `https://nominatim.openstreetmap.org/search` | Submit-only geocoding; no autocomplete |
 | `STRAIGHTLINE_DATA_DIR` | `data`, relative to backend working directory | SQLite cache and anonymous mission records |
 | `OSM_CACHE_TTL_SECONDS` | `86400` | Provider cache freshness |
 | `MAX_MISSION_DISTANCE_M` | `25000` | Local analysis distance limit; larger values need projection/performance validation |
 | `MAX_QUERY_AREA_KM2` | `400` | Maximum Overpass box area; discovery has a stricter 64 km² cap |
 
-Required network destinations: `overpass-api.de`, `nominatim.openstreetmap.org`, and `tile.openstreetmap.org` (browser). Dependencies use PyPI and npm. The default map uses the documented OSM raster endpoint; there is no satellite endpoint or secret API key. Respect [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/), [Nominatim policy](https://operations.osmfoundation.org/policies/nominatim/), and [Overpass resource guidance](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html). No bulk tile downloads or offline tile prefetching are implemented.
+Required network destinations: `overpass-api.de`, `overpass.private.coffee` (fallback), `nominatim.openstreetmap.org`, and `tile.openstreetmap.org` (browser). Dependencies use PyPI and npm. The default map uses the documented OSM raster endpoint; there is no satellite endpoint or secret API key. Respect [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/), [Nominatim policy](https://operations.osmfoundation.org/policies/nominatim/), and [Overpass resource guidance](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html). No bulk tile downloads or offline tile prefetching are implemented.
+
+If analysis reports **More data is needed** because the geographic provider timed out, the app could not download OSM data; this does not establish that a route is impossible. Transient errors, incomplete responses and invalid JSON rotate through the configured Overpass servers within three sequential attempts. Successful data is cached; failures are not. Explicit request denials such as HTTP 403 are reported without mirror retries. The backend terminal records the failing hostname and reason. Retry **Analyse mission** after recovery; if errors persist, check network access to the provider domains. The ideal line remains available independently, and map tiles loading in the browser do not establish backend Overpass connectivity.
 
 Geographic data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), licensed under ODbL. Exported derivative geographic datasets may carry ODbL obligations. App code does not include a separate open-source license grant yet; the repository owner should choose one before third-party redistribution.
 

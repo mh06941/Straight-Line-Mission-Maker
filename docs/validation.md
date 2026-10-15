@@ -4,7 +4,7 @@ This records observed results in the prepared cloud instance, not a claim that a
 
 | Check | Observed result |
 | --- | --- |
-| Backend pytest | **108 passed**, no failures; one Starlette/httpx test-client deprecation warning |
+| Backend pytest | **120 passed**, no failures; one Starlette/httpx test-client deprecation warning |
 | Ruff | Passed for application, tests and live-check script |
 | Frontend Vitest | **9 passed** in three files |
 | TypeScript + Vite production build | Passed; MapLibre and its module worker are bundled separately |
@@ -89,3 +89,15 @@ Mapped lowered/flush kerbs now preserve footway connectivity. Unknown kerbs rema
 A final live query using the expanded fountain/pool selectors returned **13,246 features**. The corrected mission is **2,106.09 m** long, with **88.42 m maximum deviation** and **24.41 m average deviation**, within the original ±100 m target and graded **Bronze**. Maximum deviation across the southern Victoria Square comparison window fell from **69.83 m to 35.67 m**. No source mapping was edited to force this result; the data/geometry still require on-site verification.
 
 Verification: **108 backend tests**, Ruff, **9 frontend tests**, TypeScript/Vite build and **20 desktop/mobile browser checks** passed. New regressions cover lowered/flush kerbs and explicit restrictions, unknown-kerb checks, minimax ties that prefer a longer/closer route, full-geometry deviation integration, parks/plazas without explicit access tags, dense polygons, a 25 km open-space mesh, fountain detours returning to the line, and exclusion of private/farmland/raised areas and complete fence/rail obstructions. Browser tests analyse and grade the real test API's synthetic plaza/fountain route and locate its verification section. Native Windows and physical access were not tested.
+
+## Geographic-provider recovery
+
+The shared Tea Tree Gully mission requests **22.44 km²**, below the configured query-area limit. Its exact query returned **8,103 live OSM features** from the primary Overpass endpoint in **36.5 seconds** during diagnosis. The public Private.coffee mirror returned HTTP 500 in the same check, so mirror availability is not assumed. The previous backend retried one endpoint three times and reduced connection, HTTP and JSON failures to the same generic message; the original failure on the user's Windows machine cannot be distinguished from that message alone.
+
+Overpass now rotates configured endpoints within the existing three-attempt limit, keeps requests sequential, validates responses before caching, and logs the failed hostname and reason. Transient HTTP/network failures, invalid JSON and incomplete responses can recover through a mirror or a subsequent primary attempt. Explicit HTTP denials do not trigger mirror retries. A custom provider does not opt into public mirrors implicitly, and an empty fallback setting disables them.
+
+The downloaded data produces a best-effort mission of **5,635.45 m**, with **165.94 m maximum deviation** and **48.61 m average deviation**. It remains outside the unchanged ±100 m target and is **Out of grade**. GPX/GeoJSON exports were parsed successfully; the GPX contains **322 track points** and **46 grouped on-site checks**. These are planning results from current mapping, not physical verification.
+
+The updated analysis API was exercised with the exact shared parameters against the real primary provider: **HTTP 200**, a retained mission route and **8,103 features**, completing in **58.51 seconds** including analysis. Repeating the API request used the successful disk cache and returned the same route in **10.52 seconds**. No test fixture or synthetic geography was substituted for either request.
+
+All **120 backend tests** and Ruff checks passed. Added regression cases cover timeout/HTTP/JSON/incomplete-response failover, identical queries across mirrors, caching only successful responses, bounded primary reattempts, actionable total failure, explicit denials and custom-provider/opt-out configuration. Frontend code and dependencies were unchanged; their preceding checks are recorded above.

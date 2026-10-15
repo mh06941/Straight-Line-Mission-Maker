@@ -3,17 +3,30 @@
 import asyncio
 import hashlib
 import json
+import logging
 import time
+from urllib.parse import urlsplit
 
 import httpx
 
 from . import storage
-from .config import CACHE_TTL_SECONDS, GEOCODE_URL, MAX_QUERY_AREA_KM2, OVERPASS_URL, USER_AGENT
+from .config import (
+    CACHE_TTL_SECONDS,
+    GEOCODE_URL,
+    MAX_QUERY_AREA_KM2,
+    OVERPASS_FALLBACK_URLS,
+    OVERPASS_URL,
+    USER_AGENT,
+)
 from .geo import bbox_area
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderError(Exception):
-    pass
+    def __init__(self, message, *, retryable=False):
+        super().__init__(message)
+        self.retryable = retryable
 
 
 class OSMProvider:
@@ -23,16 +36,13 @@ class OSMProvider:
         self.last_overpass = 0.0
         self.last_geocode = 0.0
 
-    async def _request(self, url, *, method="GET", **kwargs):
-        for attempt in range(3):
+    async def _request(self, url, *, method="GET", attempts=3, **kwargs):
+        for attempt in range(attempts):
             try:
                 async with httpx.AsyncClient(
                     timeout=httpx.Timeout(65, connect=15), headers={"User-Agent": USER_AGENT}
                 ) as client:
                     response = await client.request(method, url, **kwargs)
-                if response.status_code in (429, 502, 503, 504) and attempt < 2:
-                    await asyncio.sleep(2 ** (attempt + 1))
-                    continue
                 response.raise_for_status()
                 return response.json()
             except (httpx.HTTPError, ValueError) as error:
@@ -44,11 +54,54 @@ class OSMProvider:
                     raise ProviderError(
                         f"Geographic provider denied the request (HTTP {error.response.status_code}). Check service/network policy."
                     ) from error
+                if attempt + 1 < attempts:
+                    await asyncio.sleep(2 ** (attempt + 1))
+                    continue
+                if isinstance(error, httpx.HTTPStatusError):
+                    reason = f"HTTP {error.response.status_code}"
+                elif isinstance(error, httpx.TimeoutException):
+                    reason = "request timed out"
+                elif isinstance(error, httpx.HTTPError):
+                    reason = "connection failed; check network access and TLS certificates"
+                else:
+                    reason = "invalid JSON response"
+                raise ProviderError(f"Geographic provider failed: {reason}.", retryable=True) from error
+
+    async def _overpass(self, query):
+        endpoints = tuple(dict.fromkeys((OVERPASS_URL, *OVERPASS_FALLBACK_URLS)))
+        # Keep the original three-attempt limit, rotating mirrors rather than
+        # spending every attempt on one unavailable server. Never race queries.
+        for attempt in range(3):
+            url = endpoints[attempt % len(endpoints)]
+            try:
+                data = await self._request(url, method="POST", attempts=1, data={"data": query})
+                if isinstance(data, dict) and "remark" in data:
+                    raise ProviderError(
+                        "OSM query was incomplete or exceeded provider limits. Try a smaller area.",
+                        retryable=True,
+                    )
+                elements = data.get("elements") if isinstance(data, dict) else None
+                if not isinstance(elements, list) or len(elements) > 60000:
+                    raise ProviderError(
+                        "OSM response is too large or incomplete. Try a smaller area.", retryable=True
+                    )
+                return data
+            except ProviderError as error:
+                logger.warning(
+                    "Overpass attempt %d/3 on %s failed: %s",
+                    attempt + 1,
+                    urlsplit(url).hostname,
+                    error,
+                )
+                if not error.retryable:
+                    raise
                 if attempt == 2:
                     raise ProviderError(
-                        "Geographic provider is unavailable or timed out. Your ideal line is still available; retry later."
+                        "OpenStreetMap data could not be downloaded after 3 attempts. "
+                        f"Last error: {error} Your ideal line is still available. "
+                        "Retry Analyse mission; if this continues, check the backend terminal and network access."
                     ) from error
-                await asyncio.sleep(2**attempt)
+                await asyncio.sleep(2 ** (attempt + 1))
 
     async def region(self, boxes):
         if bbox_area(boxes) > MAX_QUERY_AREA_KM2:
@@ -86,16 +139,10 @@ class OSMProvider:
                     parts.append(selector + box + ";")
             query = "[out:json][timeout:45][maxsize:32000000];(" + "".join(parts) + ");out body geom;"
             try:
-                data = await self._request(OVERPASS_URL, method="POST", data={"data": query})
+                data = await self._overpass(query)
             finally:
                 self.last_overpass = time.monotonic()
-            if "remark" in data:
-                raise ProviderError(
-                    "OSM query was incomplete or exceeded provider limits. Try a smaller area."
-                )
-            elements = data.get("elements")
-            if not isinstance(elements, list) or len(elements) > 60000:
-                raise ProviderError("OSM response is too large or incomplete. Try a smaller area.")
+            elements = data["elements"]
             fetched = storage.cache_put(key, {"elements": elements}, CACHE_TTL_SECONDS)
             return {"elements": elements, "fetched_at": fetched, "cached": False}
 
