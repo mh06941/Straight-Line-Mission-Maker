@@ -22,6 +22,19 @@ export async function api<T>(
   const data = await response.json();
   if (!response.ok) {
     const detail = data.detail;
+    if (
+      response.status === 422 &&
+      Array.isArray(detail) &&
+      detail.some(
+        (issue: { type?: string; loc?: (string | number)[] }) =>
+          issue.type === "extra_forbidden" &&
+          issue.loc?.join(".") === "body.allow_unverified_crossings",
+      )
+    ) {
+      throw new Error(
+        "The API server is older than this frontend. Stop it and restart it from the updated project's backend folder.",
+      );
+    }
     throw new Error(
       Array.isArray(detail)
         ? detail.map((d: { msg: string }) => d.msg).join(" ")

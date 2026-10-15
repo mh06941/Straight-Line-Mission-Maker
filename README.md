@@ -66,6 +66,8 @@ If the frontend is blank with a MapLibre `default`-export error, install the cur
 
 For an existing Git checkout, stop **both the frontend and backend**, run `git pull origin main` from the repository root, then `uv sync --frozen` in `backend` and `npm ci` in `frontend`. Restart both using the commands above; use `npm run dev -- --force` to refresh Vite's dependency cache. The grade display requires the updated API as well as the frontend.
 
+If selecting endpoints shows **Extra inputs are not permitted** or **The API server is older than this frontend**, the backend may still be running from an older checkout. Stop the API terminal with Ctrl+C and restart from the updated checkout's `backend` directory. The API on port 8000 must support `allow_unverified_crossings`; its schema is visible at `http://127.0.0.1:8000/openapi.json`. Updating/restarting only Vite does not update a backend process running from a different folder.
+
 If the folder was downloaded as a ZIP, it is not a Git checkout. With Git installed, create a fresh clone in a separate folder:
 
 ```powershell

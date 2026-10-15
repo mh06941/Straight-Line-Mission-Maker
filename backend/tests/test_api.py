@@ -19,6 +19,17 @@ def test_health_preview_validation(mission):
     assert client.post("/api/missions/preview", json={"start": {"lat": 100, "lon": 0}}).status_code == 422
 
 
+@pytest.mark.parametrize("crossings", [True, False])
+def test_preview_accepts_crossing_option_and_still_rejects_unknown_fields(mission, crossings):
+    body = {**mission.model_dump(), "allow_unverified_crossings": crossings}
+    response = client.post("/api/missions/preview", json=body)
+    assert response.status_code == 200
+    assert response.json()["distance_m"] == pytest.approx(1000)
+    response = client.post("/api/missions/preview", json={**body, "unknown_option": True})
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "unknown_option"]
+
+
 def test_analyse_persist_and_export(mission, network, monkeypatch):
     async def region(boxes):
         return network

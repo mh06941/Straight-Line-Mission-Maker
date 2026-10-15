@@ -4,9 +4,9 @@ This records observed results in the prepared cloud instance, not a claim that a
 
 | Check | Observed result |
 | --- | --- |
-| Backend pytest | **87 passed**, no failures; one Starlette/httpx test-client deprecation warning |
+| Backend pytest | **89 passed**, no failures; one Starlette/httpx test-client deprecation warning |
 | Ruff | Passed for application, tests and live-check script |
-| Frontend Vitest | **7 passed** in two files |
+| Frontend Vitest | **9 passed** in three files |
 | TypeScript + Vite production build | Passed; MapLibre and its module worker are bundled separately |
 | Playwright desktop + mobile | **18 passed**: planning/analysis/grades/best-effort routing, on-site checks and crossing proposals, saving/sharing/GPX export, global search/map selection/layers/help, discovery, and development startup/worker regressions |
 | Production host API | Health, HTML root, OpenAPI docs, geodesic preview and real OSM analysis served successfully |
@@ -75,3 +75,7 @@ The user's shared Adelaide mission was reproduced with a bounded live OSM query 
 The same captured real OSM data now produces a retained best-effort mission of **6,093.99 m**, maximum deviation **243.21 m**, **143.21 m** beyond the unchanged ±100 m target, graded **Out of grade**. Its 32 grouped checks comprise **7 proposed road crossings, 2 mapped indoor passages and 23 sections with uncertain access**. The result is an exploratory plan requiring on-site checks, not evidence that the whole route can be traversed. Recalculation with future map data may differ. No source data was edited to manufacture a closer route.
 
 All **87 backend tests**, Ruff, **7 frontend tests**, the TypeScript/Vite build and **18 desktop/mobile browser checks** passed. Tests cover retaining and grading a route beyond target, optional crossing connections and their geometry/reasons, exclusion in strict mode, mapped indoor passages, obstacle/foot restrictions, grade separation, GPX verification waypoints and GeoJSON metadata. Browser checks locate a proposed crossing, verify the orange-dash legend, disable/re-enable proposals and export the best-effort mission. After the walking comparison was separated from proposed links, the two affected desktop/mobile flows were rerun and passed.
+
+## Older API diagnostic
+
+The screenshot's **Extra inputs are not permitted** error was reproduced by validating the current frontend payload against the preceding API schema: the rejected field was `allow_unverified_crossings`. The current API accepted the same Adelaide preview request with HTTP 200. The frontend now identifies this specific older-schema response and explains that the API must be restarted from the updated backend folder. It preserves ordinary validation errors and does not silently drop the crossing option. Regression checks cover both boolean values and continued rejection of genuinely unknown inputs. **89 backend tests**, **9 frontend tests**, Ruff and the TypeScript/Vite build passed for this follow-up.
