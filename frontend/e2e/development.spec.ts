@@ -1,5 +1,51 @@
 import { expect, test } from "@playwright/test";
 
+test("map worker processes data in development and production", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const state = window as typeof window & {
+      mapWorkerMessages: number;
+      mapWorkerErrors: string[];
+    };
+    state.mapWorkerMessages = 0;
+    state.mapWorkerErrors = [];
+    const NativeWorker = window.Worker;
+    window.Worker = class extends NativeWorker {
+      constructor(...args: ConstructorParameters<typeof Worker>) {
+        super(...args);
+        this.addEventListener("message", () => state.mapWorkerMessages++);
+        this.addEventListener("error", (event) =>
+          state.mapWorkerErrors.push(event.message),
+        );
+      }
+    };
+  });
+  await page.route("https://tile.openstreetmap.org/**", (route) =>
+    route.abort(),
+  );
+  for (const url of ["http://127.0.0.1:8001/", "http://127.0.0.1:5174/"]) {
+    await page.goto(url);
+    await expect(page.locator(".maplibregl-canvas")).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (window as typeof window & { mapWorkerMessages: number })
+              .mapWorkerMessages,
+        ),
+      )
+      .toBeGreaterThan(0);
+    expect(
+      await page.evaluate(
+        () =>
+          (window as typeof window & { mapWorkerErrors: string[] })
+            .mapWorkerErrors,
+      ),
+    ).toEqual([]);
+  }
+});
+
 test("planner loads even when the optimised MapLibre module has no default export", async ({
   page,
 }) => {
@@ -30,13 +76,13 @@ test("planner loads even when the optimised MapLibre module has no default expor
   expect(errors).toEqual([]);
 });
 
-test("failed map-script download leaves the planner and help usable", async ({
+test("failed map-module download leaves the planner and help usable", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route(
-    "**/node_modules/maplibre-gl/dist/maplibre-gl.js*",
+    "**/node_modules/maplibre-gl/dist/maplibre-gl.mjs*",
     (route) => route.abort(),
   );
   await page.goto("http://127.0.0.1:5174/");

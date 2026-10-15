@@ -7,7 +7,7 @@ This records observed results in the prepared cloud instance, not a claim that a
 | Backend pytest | **43 passed**, no failures; one Starlette/httpx test-client deprecation warning |
 | Ruff | Passed for application, tests and live-check script |
 | Frontend Vitest | **7 passed** in two files |
-| TypeScript + Vite production build | Passed; MapLibre is emitted as a separate local browser-script asset |
+| TypeScript + Vite production build | Passed; MapLibre and its module worker are bundled separately |
 | Playwright desktop + mobile | **6 passed**: planning/analysis/hard corridor rejection, saving/sharing/GPX export, global search/map selection/layers/help, and bounded discovery/result selection |
 | Production host API | Health, HTML root, OpenAPI docs, geodesic preview and real OSM analysis served successfully |
 | Install repeatability | Executed the saved frozen uv/npm setup and build script successfully after initial installation; lockfiles unchanged |
@@ -55,3 +55,9 @@ A Windows user reported a blank page with `maplibre-gl.js does not provide an ex
 The failure was reproduced in a browser by serving an optimized MapLibre module with named exports and no default export. React could not mount. The corrected frontend now loads the **installed UMD browser bundle as a local classic-script asset**, using MapLibre's browser global. There is no runtime package import through Vite's optimized module. Vite copies the script to a hashed production asset; there is no new CDN dependency, executable string evaluation or disabled verification. TypeScript imports remain type-only.
 
 The production TypeScript/Vite build and all **14 desktop/mobile browser checks** passed after the browser-asset change. They include the missing-default-wrapper regression, cold/warm development startup with working map controls, an unavailable-WebGL fallback, and a failed map-script download with a usable planner and help. The six existing built-application workflows also passed. These checks ran in the Linux cloud browser; native Windows startup requires updating the complete checkout and restarting Vite. The README now includes fresh-clone instructions for users whose original folder was downloaded as a ZIP.
+
+## Dependency advisory follow-up
+
+The installed dependency audit reproduced the user's four findings: the MapLibre sanitizer advisory, a Vitest/@vitest/mocker file-read advisory, and the Tinypool advisory propagated through Vitest. MapLibre was upgraded to **6.14.0** and Vitest to **4.1.11**, updating the lockfile. Tinypool is no longer in the dependency tree. `npm audit --json` then reported **zero vulnerabilities**; no forced audit fix, ignored advisory or integrity bypass was used.
+
+MapLibre 6's distribution is native ESM, replacing the intermediate UMD loader described above. The application lazily imports its named namespace without a default-export assumption, and Vite explicitly bundles its module worker and dependencies. This also retains the usable-planner fallback when the map download fails. The production build, seven frontend unit tests and **16 desktop/mobile browser checks** passed. The added worker check verifies messages are processed without worker errors in both development and production.

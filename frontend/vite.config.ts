@@ -4,10 +4,11 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  // MapLibre is loaded as a local browser script asset, without an ESM wrapper.
+  // Use MapLibre 6's native named ESM exports without a CommonJS wrapper.
   optimizeDeps: {
     exclude: ["maplibre-gl"],
   },
+  worker: { format: "es" },
   server: { proxy: { "/api": "http://127.0.0.1:8000" } },
   test: {
     environment: "jsdom",

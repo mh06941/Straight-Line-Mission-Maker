@@ -1,46 +1,25 @@
 import type * as MapLibre from "maplibre-gl";
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
 export type MapLibreRuntime = typeof MapLibre;
 
-declare global {
-  interface Window {
-    maplibregl?: MapLibreRuntime;
-  }
-}
-
 let pending: Promise<MapLibreRuntime> | null = null;
 
-/** Load the installed browser bundle as a classic script, its supported UMD
- * entry point. Vite copies this local URL into production assets; the runtime
- * never imports the dependency optimiser's ESM wrapper or assumes its exports.
+/** MapLibre 6 exposes native named ESM exports. Import the namespace lazily so
+ * a failed download leaves the planner usable, without assuming a default
+ * export. Vite bundles the separate module worker and its imports as well.
  */
 export function loadMapLibre(): Promise<MapLibreRuntime> {
-  if (window.maplibregl?.Map) return Promise.resolve(window.maplibregl);
-  if (pending) return pending;
-
-  pending = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = new URL(
-      "../../node_modules/maplibre-gl/dist/maplibre-gl.js",
-      import.meta.url,
-    ).href;
-    script.async = true;
-
-    const fail = () => {
-      clearTimeout(timeout);
-      script.remove();
-      pending = null;
-      reject(new Error("The map engine could not load."));
-    };
-    const timeout = window.setTimeout(fail, 15000);
-    script.onerror = fail;
-    script.onload = () => {
-      clearTimeout(timeout);
-      if (window.maplibregl?.Map) resolve(window.maplibregl);
-      else fail();
-    };
-    document.head.append(script);
-  });
-
+  if (!pending) {
+    pending = import("maplibre-gl")
+      .then((library) => {
+        library.setWorkerUrl(workerUrl);
+        return library;
+      })
+      .catch((error) => {
+        pending = null;
+        throw error;
+      });
+  }
   return pending;
 }

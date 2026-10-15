@@ -60,7 +60,7 @@ npm run dev
 
 Optional settings: `Copy-Item .env.example .env` from the repository root. uv manages the virtual environment; manual activation is unnecessary.
 
-If the frontend is blank with a MapLibre `default`-export error, install the current code rather than changing the import alone. The map engine now loads the installed UMD browser bundle as a local asset, bypassing Vite's module-export wrapper. A map-load failure shows a message while leaving the planner usable.
+If the frontend is blank with a MapLibre `default`-export error, install the current code rather than changing the import alone. The patched MapLibre 6 engine uses native named ESM exports with a separately bundled module worker; it does not assume a default export. A map-load failure shows a message while leaving the planner usable.
 
 For an existing Git checkout, stop the frontend, run `git pull origin main`, and restart with `npm run dev -- --force`. If the folder was downloaded as a ZIP, it is not a Git checkout. With Git installed, create a fresh clone in a separate folder:
 
