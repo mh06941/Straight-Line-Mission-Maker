@@ -47,3 +47,9 @@ uv run python -m scripts.live_smoke --region london
 ```
 
 Provider results change over time. These checks demonstrate ingestion, computation and UI integration; they do not establish current legal access, mapping completeness, terrain safety or physical traversability. Full terrain analysis, live polar routing, load testing and a new-task snapshot restoration were not performed. See [limitations](limitations.md).
+
+## Development startup follow-up
+
+A Windows user reported a blank page with `maplibre-gl.js does not provide an export named 'default'`. MapLibre's UMD entry was being consumed through an assumed default export. The frontend now uses a namespace import and declares MapLibre's dependency interop explicitly in Vite, so dependency scanning and serving use the same export handling.
+
+The production TypeScript/Vite build and all **10 desktop/mobile browser checks** passed after this change. Four added checks exercise the actual Vite development server, page load/reload with dependency optimisation, map construction and controls, and a usable planner when WebGL is unavailable. The six existing built-application checks also passed. Validation ran in the Linux cloud browser; the user's Windows startup still requires pulling the fix, restarting Vite with `--force`, and refreshing the browser.

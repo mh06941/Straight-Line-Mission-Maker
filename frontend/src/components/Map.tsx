@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import type { FeatureCollection, GeoJsonProperties, Geometry } from "geojson";
 import { Compass, Layers3, LocateFixed, MousePointer2, X } from "lucide-react";
 import type {

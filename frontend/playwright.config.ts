@@ -25,10 +25,18 @@ export default defineConfig({
     },
     { name: "mobile", use: { ...devices["Pixel 7"] } },
   ],
-  webServer: {
-    command: "cd ../backend && uv run python -m tests.offline_server",
-    url: "http://127.0.0.1:8001/api/health",
-    reuseExistingServer: !process.env.CI,
-    env: { STRAIGHTLINE_DATA_DIR: "../.cache/browser-tests" },
-  },
+  webServer: [
+    {
+      command: "cd ../backend && uv run python -m tests.offline_server",
+      url: "http://127.0.0.1:8001/api/health",
+      reuseExistingServer: !process.env.CI,
+      env: { STRAIGHTLINE_DATA_DIR: "../.cache/browser-tests" },
+    },
+    {
+      command:
+        "npm run dev -- --host 127.0.0.1 --port 5174 --strictPort --force",
+      url: "http://127.0.0.1:5174",
+      reuseExistingServer: false,
+    },
+  ],
 });

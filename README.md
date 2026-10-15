@@ -60,6 +60,18 @@ npm run dev
 
 Optional settings: `Copy-Item .env.example .env` from the repository root. uv manages the virtual environment; manual activation is unnecessary.
 
+If the frontend is blank and the browser console reports that `maplibre-gl` has no `default` export, update the checkout and restart Vite with a fresh dependency scan. This project uses a namespace import and explicit UMD interop for MapLibre:
+
+```powershell
+# Stop the frontend with Ctrl+C first. Leave the backend running.
+Set-Location "$env:USERPROFILE\Straight-Line-Mission-Maker"
+git pull origin main
+Set-Location frontend
+npm run dev -- --force
+```
+
+Then hard-refresh the frontend browser tab with Ctrl+Shift+R. No dependency reinstall is needed for this import/configuration fix.
+
 ## Try a mission
 
 1. Search a place and submit, or enter `latitude, longitude`. Search moves the map; it does not choose a mission endpoint.
