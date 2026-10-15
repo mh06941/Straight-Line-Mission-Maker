@@ -4,7 +4,7 @@ This records observed results in the prepared cloud instance, not a claim that a
 
 | Check | Observed result |
 | --- | --- |
-| Backend pytest | **120 passed**, no failures; one Starlette/httpx test-client deprecation warning |
+| Backend pytest | **136 passed**, no failures; one Starlette/httpx test-client deprecation warning |
 | Ruff | Passed for application, tests and live-check script |
 | Frontend Vitest | **9 passed** in three files |
 | TypeScript + Vite production build | Passed; MapLibre and its module worker are bundled separately |
@@ -101,3 +101,15 @@ The downloaded data produces a best-effort mission of **5,635.45 m**, with **165
 The updated analysis API was exercised with the exact shared parameters against the real primary provider: **HTTP 200**, a retained mission route and **8,103 features**, completing in **58.51 seconds** including analysis. Repeating the API request used the successful disk cache and returned the same route in **10.52 seconds**. No test fixture or synthetic geography was substituted for either request.
 
 All **120 backend tests** and Ruff checks passed. Added regression cases cover timeout/HTTP/JSON/incomplete-response failover, identical queries across mirrors, caching only successful responses, bounded primary reattempts, actionable total failure, explicit denials and custom-provider/opt-out configuration. Frontend code and dependencies were unchanged; their preceding checks are recorded above.
+
+## Continued provider outage and downloaded-region import
+
+The next shared mission requested **9.12 km²**. Its full primary-provider query returned **4,335 live OSM features** in **46.03 seconds**. A subsequent half-area probe reproduced the user's exact **HTTP 502 / HTTP 500 / HTTP 502** sequence. A later retry of that smaller query succeeded after **40.25 seconds**, so smaller queries were not adopted as a demonstrated availability fix. Both the user's logs and cloud probes identify intermittent external-provider failures. The final analysis HTTP 200 is the application returning its insufficient-data result, not evidence of a successful provider download.
+
+A validated CLI import now accepts an explicitly downloaded complete StraightLine OSM region bundle. It preserves source age, normal TTL, saved missions and newer cache entries. Query-precision keys allow reuse despite insignificant projection roundoff; legacy keys remain readable. Imported data is only used for matching query bounds. No fabricated geography, expired-cache fallback or bundled test fixture is used in production.
+
+The complete live download produces **no connected route in strict mode**. With the same endpoints and relaxed access, it produces a **3,508.66 m** best-effort mission, **168.51 m maximum deviation**, outside the unchanged ±100 m target and **Out of grade**. GPX export contains **210 track points** and **29 grouped on-site checks**. The actual region bundle and route exports were generated as separate downloadable artifacts; geographic data was not committed to the repository.
+
+Verification: **136 backend tests** and Ruff passed. New checks exercise the import command in a separate process, real API analysis with provider access forbidden, fetch-time/expiry preservation, non-destructive storage, invalid/stale bundles, projection roundoff and legacy-cache compatibility. Frontend code and dependencies were unchanged. Native Windows and physical access remain untested.
+
+The actual **2.64 MB / 4,335-feature** live region bundle was imported by the documented CLI into a separate storage directory, then the user's precise mission was submitted through the API with all provider requests forbidden. Strict mode returned its cached no-route result in **1.05 seconds**; relaxed mode returned the retained **168.51 m** route in **8.14 seconds**. Both responses used the imported cache and preserved its source timestamp.

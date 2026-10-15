@@ -11,7 +11,7 @@ Provider policy requirements:
 - **Nominatim:** server-side submitted searches, cached for seven days and serialized to at most one request per 1.1 seconds. No autocomplete. Set a meaningful identifying user agent and contact. If traffic grows, use a provider designed for that load or self-host.
 - **Overpass:** bounded area, maxsize 32 MB and query timeout 45 s; HTTP timeout 65 s; max three attempts with backoff for transient failures. One request at a time with a 2 s interval. Responses with `remark` are rejected as incomplete. Cache expires after 24 hours by default.
 - **OSM raster tiles:** normal interactive browser requests directly to the documented endpoint. Attribution is always displayed. No server proxy, bulk caching or prefetching. A public deployment must follow the tile usage policy or configure an appropriate licensed provider in `frontend/src/components/Map.tsx`.
-- Default sources need `overpass-api.de`, `nominatim.openstreetmap.org` and `tile.openstreetmap.org`. Package installation also needs the usual PyPI/npm destinations.
+- Default sources need `overpass-api.de`, `overpass.private.coffee` (fallback), `nominatim.openstreetmap.org` and `tile.openstreetmap.org`. Package installation also needs the usual PyPI/npm destinations.
 
 SQLite stores cache and anonymous mission coordinates. Mission IDs are random UUIDs; they are not an account/authentication system. Do not store private trip details on a shared instance without a privacy and retention plan. Browser saves remain device-local. The production app never loads the synthetic provider in `backend/tests/offline_server.py`; the test server uses a separate storage directory.
 

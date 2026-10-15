@@ -182,6 +182,16 @@ Required network destinations: `overpass-api.de`, `overpass.private.coffee` (fal
 
 If analysis reports **More data is needed** because the geographic provider timed out, the app could not download OSM data; this does not establish that a route is impossible. Transient errors, incomplete responses and invalid JSON rotate through the configured Overpass servers within three sequential attempts. Successful data is cached; failures are not. Explicit request denials such as HTTP 403 are reported without mirror retries. The backend terminal records the failing hostname and reason. Retry **Analyse mission** after recovery; if errors persist, check network access to the provider domains. The ideal line remains available independently, and map tiles loading in the browser do not establish backend Overpass connectivity.
 
+If both providers are unavailable and you have a downloaded **StraightLine OSM region bundle**, import it from the updated checkout's `backend` directory:
+
+```powershell
+uv run python -m scripts.import_osm "$env:USERPROFILE\Downloads\region.json"
+```
+
+Replace the filename with the downloaded bundle's name, then analyse the same endpoints and corridor again. Strict/relaxed settings can change without another download. The import uses the existing SQLite cache and preserves saved missions, newer cached data and the original data-fetch timestamp. The normal cache lifetime (24 hours by default) runs from that original timestamp; importing again does not renew it. Expired/incomplete bundles are rejected. Cache keys match the actual six-decimal Overpass query coordinates so small projection differences between operating systems do not cause unnecessary downloads; existing version-2 cached regions remain readable.
+
+Bundles contain complete provider data for their recorded query boxes, OSM attribution and a fetch timestamp. Arbitrary OSM/PBF/GeoJSON files are not this bundle format. Changing endpoints or corridor may require a different region download. This avoids provider requests for a matching cached region; browser map tiles still use their normal online source. **Mapped paths only** can still report a disconnected network after a successful import. Disable it to consider the labelled exploratory connections and on-site checks.
+
 Geographic data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), licensed under ODbL. Exported derivative geographic datasets may carry ODbL obligations. App code does not include a separate open-source license grant yet; the repository owner should choose one before third-party redistribution.
 
 ## Build and deployment

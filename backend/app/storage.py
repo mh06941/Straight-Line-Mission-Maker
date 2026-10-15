@@ -31,12 +31,16 @@ def cache_get(key):
     return (json.loads(row[0]), row[1]) if row else None
 
 
-def cache_put(key, value, ttl):
+def cache_put(key, value, ttl, *, created_at=None):
     now = time.time()
+    created = now if created_at is None else created_at
     with connection() as db:
-        db.execute("INSERT OR REPLACE INTO cache VALUES (?,?,?,?)", (key, json.dumps(value), now + ttl, now))
+        db.execute(
+            "INSERT OR REPLACE INTO cache VALUES (?,?,?,?)",
+            (key, json.dumps(value), created + ttl, created),
+        )
         db.execute("DELETE FROM cache WHERE expires<?", (now,))
-    return now
+    return created
 
 
 def save_mission(mission):

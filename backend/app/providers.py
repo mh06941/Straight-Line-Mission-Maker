@@ -23,6 +23,19 @@ from .geo import bbox_area
 logger = logging.getLogger(__name__)
 
 
+def region_cache_key(boxes):
+    # Match the actual query precision, including across Windows/Linux projections.
+    canonical = [[f"{value:.6f}" for value in box] for box in boxes]
+    return "osm:v3:" + hashlib.sha256(json.dumps(canonical).encode()).hexdigest()
+
+
+def region_cache_get(boxes):
+    # Keep already downloaded v2 regions while transitioning to stable query keys.
+    legacy = "osm:v2:" + hashlib.sha256(json.dumps(boxes, sort_keys=True).encode()).hexdigest()
+    hits = [storage.cache_get(key) for key in (region_cache_key(boxes), legacy)]
+    return max((hit for hit in hits if hit is not None), key=lambda hit: hit[1], default=None)
+
+
 class ProviderError(Exception):
     def __init__(self, message, *, retryable=False):
         super().__init__(message)
@@ -108,13 +121,12 @@ class OSMProvider:
             raise ValueError(
                 f"Requested OSM area exceeds {MAX_QUERY_AREA_KM2:g} km². Shorten the mission or narrow the search."
             )
-        # Versioned selector set: older cached regions may lack plaza fountains/pools.
-        key = "osm:v2:" + hashlib.sha256(json.dumps(boxes, sort_keys=True).encode()).hexdigest()
-        hit = storage.cache_get(key)
+        key = region_cache_key(boxes)
+        hit = region_cache_get(boxes)
         if hit:
             return {"elements": hit[0]["elements"], "fetched_at": hit[1], "cached": True}
         async with self.overpass_lock:
-            hit = storage.cache_get(key)
+            hit = region_cache_get(boxes)
             if hit:
                 return {"elements": hit[0]["elements"], "fetched_at": hit[1], "cached": True}
             await asyncio.sleep(max(0, 2 - (time.monotonic() - self.last_overpass)))
