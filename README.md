@@ -60,17 +60,20 @@ npm run dev
 
 Optional settings: `Copy-Item .env.example .env` from the repository root. uv manages the virtual environment; manual activation is unnecessary.
 
-If the frontend is blank and the browser console reports that `maplibre-gl` has no `default` export, update the checkout and restart Vite with a fresh dependency scan. This project uses a namespace import and explicit UMD interop for MapLibre:
+If the frontend is blank with a MapLibre `default`-export error, install the current code rather than changing the import alone. The map engine now loads the installed UMD browser bundle as a local asset, bypassing Vite's module-export wrapper. A map-load failure shows a message while leaving the planner usable.
+
+For an existing Git checkout, stop the frontend, run `git pull origin main`, and restart with `npm run dev -- --force`. If the folder was downloaded as a ZIP, it is not a Git checkout. With Git installed, create a fresh clone in a separate folder:
 
 ```powershell
-# Stop the frontend with Ctrl+C first. Leave the backend running.
-Set-Location "$env:USERPROFILE\Straight-Line-Mission-Maker"
-git pull origin main
-Set-Location frontend
+# Stop the frontend with Ctrl+C first. The existing backend can keep running.
+Set-Location $env:USERPROFILE
+git clone https://github.com/mh06941/Straight-Line-Mission-Maker.git StraightLine-updated
+Set-Location StraightLine-updated\frontend
+npm ci
 npm run dev -- --force
 ```
 
-Then hard-refresh the frontend browser tab with Ctrl+Shift+R. No dependency reinstall is needed for this import/configuration fix.
+Use the Local address printed by Vite and hard-refresh with Ctrl+Shift+R. Subsequent updates can use `git pull origin main` from this clone. When restarting the backend later, run `uv sync --frozen` and the API startup command from the new clone's `backend` directory.
 
 ## Try a mission
 

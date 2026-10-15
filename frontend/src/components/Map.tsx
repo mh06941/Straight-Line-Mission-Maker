@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import * as maplibregl from "maplibre-gl";
+import type * as MapLibre from "maplibre-gl";
+import { loadMapLibre, type MapLibreRuntime } from "../lib/maplibre";
 import type { FeatureCollection, GeoJsonProperties, Geometry } from "geojson";
 import { Compass, Layers3, LocateFixed, MousePointer2, X } from "lucide-react";
 import type {
@@ -41,19 +42,35 @@ const labels: Record<keyof Layers, string> = {
 
 export default function MapView(props: Props) {
   const container = useRef<HTMLDivElement>(null);
-  const map = useRef<maplibregl.Map | null>(null);
+  const map = useRef<MapLibre.Map | null>(null);
   const current = useRef(props);
   current.current = props;
-  const markers = useRef<maplibregl.Marker[]>([]);
+  const markers = useRef<MapLibre.Marker[]>([]);
   const firstCorner = useRef<Coordinate | null>(null);
   const [ready, setReady] = useState(false);
   const [tileError, setTileError] = useState(false);
   const [mapError, setMapError] = useState(false);
   const [showLayers, setShowLayers] = useState(false);
   const [areaStarted, setAreaStarted] = useState(false);
+  const [maplibregl, setMapLibre] = useState<MapLibreRuntime | null>(null);
+  const [mapLoadError, setMapLoadError] = useState(false);
   useEffect(() => {
-    if (!container.current) return;
-    let instance: maplibregl.Map;
+    let cancelled = false;
+    loadMapLibre().then(
+      (library) => {
+        if (!cancelled) setMapLibre(() => library);
+      },
+      () => {
+        if (!cancelled) setMapLoadError(true);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  useEffect(() => {
+    if (!container.current || !maplibregl) return;
+    let instance: MapLibre.Map;
     try {
       instance = new maplibregl.Map({
         container: container.current,
@@ -264,18 +281,17 @@ export default function MapView(props: Props) {
       instance.remove();
       map.current = null;
     };
-  }, []);
+  }, [maplibregl]);
 
   useEffect(() => {
     if (!ready || !map.current) return;
     const instance = map.current;
+    if (!instance.getSource("features")) return;
     const set = (
       id: string,
       data: Geometry | FeatureCollection<Geometry, GeoJsonProperties> | null,
     ) =>
-      (instance.getSource(id) as maplibregl.GeoJSONSource).setData(
-        data || empty,
-      );
+      (instance.getSource(id) as MapLibre.GeoJSONSource).setData(data || empty);
     set("features", props.analysis?.features || empty);
     set("corridor", props.preview?.corridor || null);
     set("ideal", props.preview?.ideal || null);
@@ -349,7 +365,7 @@ export default function MapView(props: Props) {
   }, [ready, props.preview, props.analysis, props.layers]);
 
   useEffect(() => {
-    if (!map.current || !ready) return;
+    if (!map.current || !ready || !maplibregl) return;
     markers.current.forEach((m) => m.remove());
     markers.current = [];
     for (const [coord, target, label] of [
@@ -373,7 +389,7 @@ export default function MapView(props: Props) {
       });
       markers.current.push(marker);
     }
-  }, [ready, props.start, props.end, props.preview?.end]);
+  }, [ready, maplibregl, props.start, props.end, props.preview?.end]);
 
   useEffect(() => {
     if (props.place && map.current)
@@ -382,38 +398,37 @@ export default function MapView(props: Props) {
         zoom: 13,
         duration: 1000,
       });
-  }, [props.place]);
+  }, [props.place, ready]);
   useEffect(() => {
     if (props.focus && map.current)
       map.current.flyTo({
         center: [props.focus.lon, props.focus.lat],
         zoom: Math.max(15, map.current.getZoom()),
       });
-  }, [props.focus]);
+  }, [props.focus, ready]);
   useEffect(() => {
-    if (!props.preview || !ready || !map.current) return;
+    if (!props.preview || !ready || !map.current || !maplibregl) return;
     const bounds = new maplibregl.LngLatBounds();
     props.preview.ideal.coordinates.forEach((p) => bounds.extend([p[0], p[1]]));
     map.current.fitBounds(bounds, { padding: 90, maxZoom: 16, duration: 700 });
     // Only refit when mission endpoints change, not on every corridor adjustment.
   }, [
     ready,
+    maplibregl,
     props.preview?.start.lat,
     props.preview?.start.lon,
     props.preview?.end.lat,
     props.preview?.end.lon,
   ]);
   useEffect(() => {
-    if (!map.current || !ready) return;
+    if (!map.current || !ready || !map.current.getSource("area")) return;
     if (!props.area) {
-      (map.current.getSource("area") as maplibregl.GeoJSONSource).setData(
-        empty,
-      );
+      (map.current.getSource("area") as MapLibre.GeoJSONSource).setData(empty);
       return;
     }
     const [a, b] = props.area;
     const otherLon = a.lon + (((b.lon - a.lon + 540) % 360) - 180);
-    (map.current.getSource("area") as maplibregl.GeoJSONSource).setData({
+    (map.current.getSource("area") as MapLibre.GeoJSONSource).setData({
       type: "Polygon",
       coordinates: [
         [
@@ -447,9 +462,11 @@ export default function MapView(props: Props) {
         </span>
         <span className="map-projection">WGS84 · Global coverage</span>
       </div>
-      {mapError && (
+      {(mapError || mapLoadError) && (
         <div className="map-message error" role="alert">
-          This browser could not initialize WebGL. Use a WebGL-enabled browser.
+          {mapLoadError
+            ? "The map engine could not load. Refresh the page to retry."
+            : "This browser could not initialize WebGL. Use a WebGL-enabled browser."}{" "}
           Coordinate planning and exports remain available.
         </div>
       )}
@@ -490,7 +507,7 @@ export default function MapView(props: Props) {
           aria-label="Fit mission to map"
           disabled={!props.preview}
           onClick={() => {
-            if (props.preview && map.current) {
+            if (props.preview && map.current && maplibregl) {
               const b = new maplibregl.LngLatBounds();
               props.preview.ideal.coordinates.forEach((p) =>
                 b.extend([p[0], p[1]]),

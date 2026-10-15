@@ -7,7 +7,7 @@ This records observed results in the prepared cloud instance, not a claim that a
 | Backend pytest | **43 passed**, no failures; one Starlette/httpx test-client deprecation warning |
 | Ruff | Passed for application, tests and live-check script |
 | Frontend Vitest | **7 passed** in two files |
-| TypeScript + Vite production build | Passed; MapLibre separated into its own renderer chunk |
+| TypeScript + Vite production build | Passed; MapLibre is emitted as a separate local browser-script asset |
 | Playwright desktop + mobile | **6 passed**: planning/analysis/hard corridor rejection, saving/sharing/GPX export, global search/map selection/layers/help, and bounded discovery/result selection |
 | Production host API | Health, HTML root, OpenAPI docs, geodesic preview and real OSM analysis served successfully |
 | Install repeatability | Executed the saved frozen uv/npm setup and build script successfully after initial installation; lockfiles unchanged |
@@ -50,6 +50,8 @@ Provider results change over time. These checks demonstrate ingestion, computati
 
 ## Development startup follow-up
 
-A Windows user reported a blank page with `maplibre-gl.js does not provide an export named 'default'`. MapLibre's UMD entry was being consumed through an assumed default export. The frontend now uses a namespace import and declares MapLibre's dependency interop explicitly in Vite, so dependency scanning and serving use the same export handling.
+A Windows user reported a blank page with `maplibre-gl.js does not provide an export named 'default'`. The first namespace-import/explicit-interop change passed ten local browser checks but did not resolve the user's report. Inspection of Vite's generated code explained why: it rewrites a namespace import into a default import for a CommonJS dependency.
 
-The production TypeScript/Vite build and all **10 desktop/mobile browser checks** passed after this change. Four added checks exercise the actual Vite development server, page load/reload with dependency optimisation, map construction and controls, and a usable planner when WebGL is unavailable. The six existing built-application checks also passed. Validation ran in the Linux cloud browser; the user's Windows startup still requires pulling the fix, restarting Vite with `--force`, and refreshing the browser.
+The failure was reproduced in a browser by serving an optimized MapLibre module with named exports and no default export. React could not mount. The corrected frontend now loads the **installed UMD browser bundle as a local classic-script asset**, using MapLibre's browser global. There is no runtime package import through Vite's optimized module. Vite copies the script to a hashed production asset; there is no new CDN dependency, executable string evaluation or disabled verification. TypeScript imports remain type-only.
+
+The production TypeScript/Vite build and all **14 desktop/mobile browser checks** passed after the browser-asset change. They include the missing-default-wrapper regression, cold/warm development startup with working map controls, an unavailable-WebGL fallback, and a failed map-script download with a usable planner and help. The six existing built-application workflows also passed. These checks ran in the Linux cloud browser; native Windows startup requires updating the complete checkout and restarting Vite. The README now includes fresh-clone instructions for users whose original folder was downloaded as a ZIP.

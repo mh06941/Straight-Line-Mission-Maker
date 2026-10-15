@@ -4,11 +4,9 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  // MapLibre's distributed entry is UMD. Make its interop explicit so Vite's
-  // first dependency scan and later requests agree on the module's exports.
+  // MapLibre is loaded as a local browser script asset, without an ESM wrapper.
   optimizeDeps: {
-    include: ["maplibre-gl"],
-    needsInterop: ["maplibre-gl"],
+    exclude: ["maplibre-gl"],
   },
   server: { proxy: { "/api": "http://127.0.0.1:8000" } },
   test: {
@@ -19,6 +17,5 @@ export default defineConfig({
   build: {
     // MapLibre's self-contained renderer/worker is ~1 MB before gzip.
     chunkSizeWarningLimit: 1100,
-    rollupOptions: { output: { manualChunks: { maplibre: ["maplibre-gl"] } } },
   },
 });
