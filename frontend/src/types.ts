@@ -11,6 +11,7 @@ export interface Parameters {
   distance_m?: number | null;
   max_deviation_m: number;
   strict: boolean;
+  allow_unverified_crossings?: boolean;
 }
 export interface Preview {
   start: Coordinate;
@@ -33,7 +34,18 @@ export interface Route {
   uncertain_distance_m: number;
   unverified_sections: number;
   corridor_compliant?: boolean;
+  target_excess_m?: number;
+  verification_sections?: VerificationSection[];
   surfaces: string[];
+}
+export interface VerificationSection {
+  id: string;
+  kind: "road_crossing" | "indoor_passage" | "open_space" | "access_unknown";
+  name: string;
+  reason: string;
+  distance_m: number;
+  geometry: LineString;
+  coordinate: [number, number];
 }
 export interface Obstacle {
   id: string;
@@ -64,7 +76,12 @@ export interface Analysis extends Preview {
   id: string;
   created_at: string;
   parameters: Parameters;
-  status: "mapped" | "uncertain" | "no_route" | "insufficient_data";
+  status:
+    | "mapped"
+    | "uncertain"
+    | "outside_corridor"
+    | "no_route"
+    | "insufficient_data";
   message: string;
   walking: Route | null;
   mission: Route | null;

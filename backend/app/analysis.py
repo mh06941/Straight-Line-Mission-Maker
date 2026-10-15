@@ -165,7 +165,9 @@ def analyse(request, data=None, provider_error=None):
         }
     )
     result["features"], result["obstacles"] = features_and_obstacles(elements, geo)
-    graph, counts = build_graph(elements, geo, request.strict)
+    graph, counts = build_graph(
+        elements, geo, request.strict, allow_unverified_crossings=request.allow_unverified_crossings
+    )
     result["data"].update(
         {"network_nodes": graph.number_of_nodes(), "network_edges": graph.number_of_edges(), **counts}
     )
@@ -196,7 +198,7 @@ def analyse(request, data=None, provider_error=None):
         result["warnings"].append(
             "Routes begin/end at snapped path locations. Access across the displayed endpoint gaps is unassessed; these gaps are excluded from route statistics."
         )
-    walking_edges = shortest_edges(graph, start, end)
+    walking_edges = shortest_edges(graph, start, end, include_proposals=False)
     result["walking"] = route_stats(walking_edges, graph, geo)
     optimum = bottleneck(graph, start, end)
     result["minimum_corridor_m"] = optimum
@@ -204,12 +206,6 @@ def analyse(request, data=None, provider_error=None):
         result["status"] = "no_route"
         result["message"] = (
             "The eligible walking network is disconnected. No route found in the downloaded area; a route outside it may exist."
-        )
-        return result
-    if optimum > request.max_deviation_m:
-        result["status"] = "no_route"
-        result["message"] = (
-            f"No route within ±{request.max_deviation_m:g} m in the available network. Its minimum corridor is approximately ±{optimum:.1f} m. The corridor was not widened."
         )
         return result
     edges = shortest_edges(graph, start, end, optimum)
@@ -223,6 +219,14 @@ def analyse(request, data=None, provider_error=None):
         else "Route found within the corridor using mapped pedestrian access."
     )
     route["corridor_compliant"] = route["max_deviation_m"] <= request.max_deviation_m
+    route["target_excess_m"] = max(0, route["max_deviation_m"] - request.max_deviation_m)
+    if not route["corridor_compliant"]:
+        result["status"] = "outside_corridor"
+        result["message"] = (
+            f"Best available mission route: maximum deviation {optimum:.1f} m, "
+            f"exceeding your ±{request.max_deviation_m:g} m target by {route['target_excess_m']:.1f} m. "
+            "The target corridor is unchanged. Inspect the route and its on-site checks."
+        )
     # Deliberately partial: no elevation input is converted into a fictitious easy terrain score.
     known_score = min(
         10,

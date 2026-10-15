@@ -58,12 +58,11 @@ def test_analysis_grades_generated_route_independently_of_corridor(mission, devi
     assert result["planned_grade"]["max_deviation_m"] == result["mission"]["max_deviation_m"]
 
 
-def test_no_route_and_missing_data_remain_ungraded(mission, network):
+def test_best_effort_route_is_graded_and_missing_data_remains_ungraded(mission, network):
     mission.max_deviation_m = 10
-    no_route = analyse(mission, network)
-    assert no_route["walking"] is not None
-    assert no_route["mission"] is None
-    assert no_route["planned_grade"] is None
+    best_effort = analyse(mission, network)
+    assert best_effort["mission"]["corridor_compliant"] is False
+    assert best_effort["planned_grade"]["tier"] == "gold"
     assert analyse(mission, provider_error="Unavailable")["planned_grade"] is None
     assert analyse(mission, {"elements": [], "fetched_at": 0, "cached": False})["planned_grade"] is None
 

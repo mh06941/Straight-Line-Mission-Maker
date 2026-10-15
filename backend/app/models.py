@@ -22,6 +22,7 @@ class MissionRequest(BaseModel):
     distance_m: float | None = Field(default=None, ge=10, le=MAX_DISTANCE_M)
     max_deviation_m: float = Field(default=50, ge=1, le=2000)
     strict: bool = True
+    allow_unverified_crossings: bool = True
 
     @model_validator(mode="after")
     def check_destination(self):
@@ -43,6 +44,7 @@ class DiscoveryRequest(BaseModel):
     max_deviation_m: float = Field(default=100, ge=1, le=1000)
     max_results: int = Field(default=5, ge=1, le=10)
     strict: bool = True
+    allow_unverified_crossings: bool = True
     terrain: Literal["any", "paved", "trail"] = "any"
 
     @model_validator(mode="after")

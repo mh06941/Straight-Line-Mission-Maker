@@ -1,5 +1,60 @@
 import { expect, test } from "@playwright/test";
 
+test("relaxed planning locates crossing checks and can disable proposals", async ({
+  page,
+}) => {
+  await page.route("https://tile.openstreetmap.org/**", (route) =>
+    route.abort(),
+  );
+  const parameters = {
+    start: { lat: 51.52, lon: -0.1 },
+    bearing: 90,
+    distance_m: 1000,
+    max_deviation_m: 10,
+    strict: false,
+    allow_unverified_crossings: true,
+  };
+  await page.goto(
+    `/?mission=${encodeURIComponent(JSON.stringify(parameters))}`,
+  );
+  const proposals = page.getByRole("checkbox", {
+    name: /Propose road crossings to verify/,
+  });
+  await expect(proposals).toBeChecked();
+  await page.getByRole("button", { name: "Analyse mission" }).click();
+  await expect(
+    page.getByText("Best available mission route", { exact: true }),
+  ).toBeVisible();
+  await page.locator(".verification-list summary").click();
+  await page.getByRole("button", { name: /Cross Browser test road/ }).click();
+  await expect(page.locator(".map-legend")).toContainText("To verify");
+  await expect(page.locator(".verification-list")).toContainText(
+    "check the crossing point, median and barriers on site",
+  );
+  await page.getByLabel("Export route").selectOption("mission");
+  await expect(
+    page.getByRole("button", { name: "Download mission" }),
+  ).toBeEnabled();
+  await proposals.uncheck();
+  await page.getByRole("button", { name: "Analyse mission" }).click();
+  await expect(
+    page.getByText("No connected route found", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Planned mission grade" }),
+  ).toHaveCount(0);
+  await proposals.check();
+  await page.getByRole("button", { name: "Analyse mission" }).click();
+  await expect(
+    page.getByText("Best available mission route", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("region", { name: "Planned mission grade" })
+    .screenshot({
+      path: `test-results/best-effort-grade-${test.info().project.name}.png`,
+    });
+});
+
 test("bounded discovery selects a real analysed candidate", async ({
   page,
 }) => {
@@ -52,7 +107,7 @@ test("bounded discovery selects a real analysed candidate", async ({
   ).toBeVisible();
 });
 
-test("plan, analyse, respect corridor, save, share and export", async ({
+test("plan, analyse, show best effort beyond target, save, share and export", async ({
   page,
 }) => {
   const pageErrors: string[] = [];
@@ -120,11 +175,11 @@ test("plan, analyse, respect corridor, save, share and export", async ({
   await page.getByRole("button", { name: "10 m", exact: true }).click();
   await page.getByRole("button", { name: "Analyse mission" }).click();
   await expect(
-    page.getByText("No route within this corridor", { exact: true }),
+    page.getByText("Best available mission route", { exact: true }),
   ).toBeVisible();
-  await expect(grade).toHaveCount(0);
+  await expect(grade.locator(".grade-badge")).toHaveText("Gold");
   await expect(
-    page.getByText("Planned grade unavailable until a mission route is found."),
+    page.getByText("25 m over target", { exact: true }),
   ).toBeVisible();
   await page
     .getByRole("navigation")

@@ -828,6 +828,72 @@ h1 {
 .analysis-results {
   margin-top: 23px;
 }
+.verification-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 10px 0 20px;
+  font-size: 11px;
+}
+.verification-option input {
+  margin-top: 3px;
+  accent-color: var(--green);
+}
+.verification-option strong,
+.verification-option small {
+  display: block;
+}
+.verification-option small {
+  color: #65715d;
+  line-height: 1.6;
+  margin-top: 5px;
+}
+.verification-list {
+  margin: 0 0 24px;
+  font-size: 11px;
+}
+.verification-list summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+}
+.verification-list p {
+  color: #68725d;
+  line-height: 1.7;
+}
+.verification-list > div {
+  max-height: 280px;
+  overflow-y: auto;
+}
+.verification-list button {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 0;
+  text-align: left;
+  width: 100%;
+  border-bottom: 1px solid var(--line);
+}
+.verification-list svg {
+  flex-shrink: 0;
+  color: #a2591b;
+}
+.verification-list strong,
+.verification-list small {
+  display: block;
+}
+.verification-list small {
+  margin-top: 5px;
+  line-height: 1.7;
+  color: #68725d;
+}
+.stat-grid .target-exceeded {
+  color: #994521;
+}
+.verification {
+  background-color: #bd681b;
+}
 .feasibility {
   display: flex;
   gap: 10px;
@@ -1626,6 +1692,8 @@ h1 {
   border: 1px solid #d8e1ce;
   border-radius: 6px;
   display: flex;
+  flex-wrap: wrap;
+  max-width: calc(100% - 65px);
   align-items: center;
   gap: 18px;
   box-shadow: 0 2px 10px #394d2810;
@@ -1652,6 +1720,15 @@ h1 {
     transparent 7px
   );
   height: 2px;
+}
+.map-legend i.verification {
+  background: repeating-linear-gradient(
+    to right,
+    #bd681b 0,
+    #bd681b 4px,
+    transparent 4px,
+    transparent 7px
+  );
 }
 .map-bottom-note {
   position: absolute;

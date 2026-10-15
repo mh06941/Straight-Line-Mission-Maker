@@ -5,11 +5,12 @@ import {
   ChevronRight,
   Info,
   Mountain,
+  MapPin,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
 import { useState } from "react";
-import type { Analysis, Obstacle } from "../types";
+import type { Analysis, Coordinate, Obstacle } from "../types";
 import { distance } from "../lib/mission";
 import { PlannedGradeCard } from "./Grading";
 
@@ -17,27 +18,32 @@ export default function Statistics({
   analysis,
   imperial,
   onObstacle,
+  onLocate,
 }: {
   analysis: Analysis;
   imperial: boolean;
   onObstacle: (o: Obstacle) => void;
+  onLocate: (point: Coordinate) => void;
 }) {
   const [tab, setTab] = useState<"overview" | "obstacles" | "data">("overview");
   const route = analysis.mission;
   const good = analysis.status === "mapped";
+  const outside = route?.corridor_compliant === false;
   return (
     <section className="analysis-results" aria-label="Mission analysis">
       <div className={`feasibility ${good ? "success" : ""}`} role="status">
         {good ? <ShieldCheck size={20} /> : <TriangleAlert size={20} />}
         <div>
           <strong>
-            {good
-              ? "A line worth exploring"
-              : analysis.status === "uncertain"
-                ? "A route with unknowns"
-                : analysis.status === "no_route"
-                  ? "No route within this corridor"
-                  : "More data is needed"}
+            {outside
+              ? "Best available mission route"
+              : good
+                ? "A line worth exploring"
+                : analysis.status === "uncertain"
+                  ? "A route with unknowns"
+                  : analysis.status === "no_route"
+                    ? "No connected route found"
+                    : "More data is needed"}
           </strong>
           <p>{analysis.message}</p>
         </div>
@@ -71,7 +77,7 @@ export default function Statistics({
                   value: analysis.distance_m,
                 },
                 {
-                  name: "Walking route",
+                  name: "Walking comparison",
                   className: "walking",
                   value: analysis.walking?.distance_m,
                 },
@@ -94,6 +100,12 @@ export default function Statistics({
                 </div>
               ))}
             </div>
+            {analysis.walking && (
+              <p className="inline-note">
+                The blue walking comparison minimises distance without a
+                corridor constraint.
+              </p>
+            )}
             {route && analysis.planned_grade && (
               <PlannedGradeCard grade={analysis.planned_grade} />
             )}
@@ -108,9 +120,15 @@ export default function Statistics({
                   <div>
                     <small>MAX. DEVIATION</small>
                     <strong>{distance(route.max_deviation_m, imperial)}</strong>
-                    <span>
-                      <Check size={12} /> Within ±
-                      {distance(analysis.max_deviation_m, imperial)}
+                    <span className={outside ? "target-exceeded" : undefined}>
+                      {outside ? (
+                        <TriangleAlert size={12} />
+                      ) : (
+                        <Check size={12} />
+                      )}
+                      {outside
+                        ? `${distance(route.target_excess_m ?? route.max_deviation_m - analysis.max_deviation_m, imperial)} over target`
+                        : `Within ±${distance(analysis.max_deviation_m, imperial)}`}
                     </span>
                   </div>
                   <div>
@@ -135,6 +153,40 @@ export default function Statistics({
                     <span>{route.unverified_sections} network sections</span>
                   </div>
                 </div>
+                {!!route.verification_sections?.length && (
+                  <details className="verification-list">
+                    <summary>
+                      {route.verification_sections.length} on-site checks{" "}
+                      <ChevronDown size={14} />
+                    </summary>
+                    <p>
+                      Orange dashed sections need confirmation. Select a section
+                      to locate it on the map.
+                    </p>
+                    <div>
+                      {route.verification_sections.map((section) => (
+                        <button
+                          key={section.id}
+                          onClick={() =>
+                            onLocate({
+                              lon: section.coordinate[0],
+                              lat: section.coordinate[1],
+                            })
+                          }
+                        >
+                          <MapPin size={15} />
+                          <span>
+                            <strong>{section.name}</strong>
+                            <small>
+                              {section.reason} ·{" "}
+                              {distance(section.distance_m, imperial)}
+                            </small>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </details>
+                )}
                 <div className="section-heading">
                   <span>How close to the line?</span>
                   <Info size={14} />

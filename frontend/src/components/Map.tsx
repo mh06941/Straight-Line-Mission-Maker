@@ -30,7 +30,7 @@ interface Props {
 const empty: FeatureCollection = { type: "FeatureCollection", features: [] };
 const labels: Record<keyof Layers, string> = {
   ideal: "Ideal geodesic",
-  walking: "Walking route",
+  walking: "Walking comparison (unconstrained)",
   mission: "Mission route",
   corridor: "Deviation corridor",
   pedestrian: "Mapped paths",
@@ -157,6 +157,7 @@ export default function MapView(props: Props) {
         "ideal",
         "walking",
         "mission",
+        "verification",
         "obstacles",
         "area",
         "snapping",
@@ -252,6 +253,16 @@ export default function MapView(props: Props) {
         });
       }
       instance.addLayer({
+        id: "verification",
+        type: "line",
+        source: "verification",
+        paint: {
+          "line-color": "#bd681b",
+          "line-width": 5,
+          "line-dasharray": [2, 2],
+        },
+      });
+      instance.addLayer({
         id: "snap-links",
         type: "line",
         source: "snapping",
@@ -297,6 +308,16 @@ export default function MapView(props: Props) {
     set("ideal", props.preview?.ideal || null);
     set("walking", props.analysis?.walking?.geometry || null);
     set("mission", props.analysis?.mission?.geometry || null);
+    set("verification", {
+      type: "FeatureCollection",
+      features: (props.analysis?.mission?.verification_sections || []).map(
+        (section) => ({
+          type: "Feature",
+          properties: { id: section.id },
+          geometry: section.geometry,
+        }),
+      ),
+    });
     set("obstacles", {
       type: "FeatureCollection",
       features: (props.analysis?.obstacles || []).map((o) => ({
@@ -337,6 +358,11 @@ export default function MapView(props: Props) {
           props.layers[id] ? "visible" : "none",
         );
     }
+    instance.setLayoutProperty(
+      "verification",
+      "visibility",
+      props.layers.mission ? "visible" : "none",
+    );
     const featureKinds = [
       "buildings",
       "water",
@@ -557,13 +583,19 @@ export default function MapView(props: Props) {
         </span>
         <span>
           <i className="walking" />
-          Walking
+          Walking comparison
         </span>
         <span>
           <i className="mission" />
           Mission
         </span>
         <span className="legend-corridor">± corridor</span>
+        {!!props.analysis?.mission?.verification_sections?.length && (
+          <span>
+            <i className="verification" />
+            To verify
+          </span>
+        )}
       </div>
     </div>
   );

@@ -35,7 +35,7 @@ def test_inner_geometry_deviation_is_not_ignored(mission):
     assert graph[1][2][0]["deviation"] == pytest.approx(150.05, abs=0.1)
 
 
-def test_hard_corridor_and_obstacle_analysis(mission, network):
+def test_target_corridor_retains_best_effort_mission_and_obstacle_analysis(mission, network):
     result = analyse(mission, network)
     assert result["mission"]["corridor_compliant"]
     assert 35 <= result["mission"]["max_deviation_m"] < 36
@@ -45,8 +45,11 @@ def test_hard_corridor_and_obstacle_analysis(mission, network):
     assert result["terrain"]["available"] is False
     mission.max_deviation_m = 10
     result = analyse(mission, network)
-    assert result["status"] == "no_route"
-    assert result["mission"] is None
+    assert result["status"] == "outside_corridor"
+    assert result["mission"] is not None
+    assert result["mission"]["corridor_compliant"] is False
+    assert result["mission"]["target_excess_m"] == pytest.approx(25.05, abs=0.1)
+    assert result["planned_grade"]["tier"] == "gold"
     assert result["walking"] is not None
     assert result["max_deviation_m"] == 10
 

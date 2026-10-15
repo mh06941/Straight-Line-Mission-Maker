@@ -4,17 +4,17 @@ This records observed results in the prepared cloud instance, not a claim that a
 
 | Check | Observed result |
 | --- | --- |
-| Backend pytest | **70 passed**, no failures; one Starlette/httpx test-client deprecation warning |
+| Backend pytest | **87 passed**, no failures; one Starlette/httpx test-client deprecation warning |
 | Ruff | Passed for application, tests and live-check script |
 | Frontend Vitest | **7 passed** in two files |
 | TypeScript + Vite production build | Passed; MapLibre and its module worker are bundled separately |
-| Playwright desktop + mobile | **16 passed**: planning/analysis/grades/hard corridor rejection, saving/sharing/GPX export, global search/map selection/layers/help, discovery, and development startup/worker regressions |
+| Playwright desktop + mobile | **18 passed**: planning/analysis/grades/best-effort routing, on-site checks and crossing proposals, saving/sharing/GPX export, global search/map selection/layers/help, discovery, and development startup/worker regressions |
 | Production host API | Health, HTML root, OpenAPI docs, geodesic preview and real OSM analysis served successfully |
 | Install repeatability | Executed the saved frozen uv/npm setup and build script successfully after initial installation; lockfiles unchanged |
 | Docker Compose | Configuration validated |
 | Python 3.13 image | Built successfully with TLS verification and the existing trusted proxy CA; non-root runtime started, health check became healthy, frontend/health/polar preview and SQLite write/read passed |
 
-Offline geographical tests cover London, rural Wales, Swiss Alps, Adelaide, rural Canada, a boundary-region coordinate pair, antimeridian crossings and both polar regions. These deterministic cases test calculations and explicit synthetic topology/access cases; they do not claim physical verification in those places. Routing regressions include the bottleneck-versus-distance tradeoff, the two-pass tie case, internal edge curvature, hard corridor rejection, nonjoining geometric crossings, locked gates, conditional access, open-space permissions and avoidance of mapped fence/building/water hazards.
+Offline geographical tests cover London, rural Wales, Swiss Alps, Adelaide, rural Canada, a boundary-region coordinate pair, antimeridian crossings and both polar regions. These deterministic cases test calculations and explicit synthetic topology/access cases; they do not claim physical verification in those places. Routing regressions include the bottleneck-versus-distance tradeoff, the two-pass tie case, internal edge curvature, retention beyond the target corridor, nonjoining mapped crossings, optional unverified crossings, indoor passages, locked gates, conditional access, open-space permissions and avoidance of mapped fence/building/water hazards.
 
 ## Live provider results
 
@@ -66,4 +66,12 @@ MapLibre 6's distribution is native ESM, replacing the intermediate UMD loader d
 
 The confirmed scale is Diamond `<10 m`, Platinum `<25 m`, Gold `<50 m`, Silver `<75 m`, Bronze `≤100 m`, then Out of grade. Backend tests exercise every exact cutoff and adjacent floating-point values, all six grades through real synthetic-network analysis, uncertain access, missing data and no-route outcomes. API checks cover the threshold endpoint, older saved analyses, discovery and GPX/GeoJSON/JSON metadata. Grading uses the unrounded generated mission maximum, independently of the selected corridor, and never assigns a grade to a missing mission route.
 
-All **70 backend tests**, **7 frontend tests**, Ruff, the TypeScript/Vite production build and **16 desktop/mobile browser checks** passed. Browser workflows verify the Gold badge for the modelled 35.05 m fixture route, all six displayed thresholds, unchanged grades under imperial display, removal of the badge when a narrower corridor has no route, discovery badges and help guidance. The development fallback checks deliberately run without an API on port 8000; the threshold request fails there while the rest of the planner and help remain usable. Production workflows use the real test API on port 8001. The dependency audit still reports **zero vulnerabilities**. Native Windows execution was not available in this cloud instance; the README now requires updating and restarting both services for this feature.
+At the grading rollout, all **70 backend tests**, **7 frontend tests**, Ruff, the TypeScript/Vite production build and **16 desktop/mobile browser checks** passed. Browser workflows verified the Gold badge for the modelled 35.05 m fixture route, all six displayed thresholds, unchanged grades under imperial display, removal of the badge when a narrower corridor had no route, discovery badges and help guidance. The best-effort follow-up below supersedes the earlier narrow-corridor rejection behavior. The development fallback checks deliberately run without an API on port 8000; the threshold request fails there while the rest of the planner and help remain usable. Production workflows use the real test API on port 8001. Native Windows execution was not available in this cloud instance; the README requires updating and restarting both services for new API features.
+
+## Best-effort routes and on-site checks
+
+The user's shared Adelaide mission was reproduced with a bounded live OSM query containing **24,079 features**. Before this change, the shortest walking comparison reached **457.14 m** deviation; the minimax network route needed **266.61 m** and was discarded against the ±100 m setting.
+
+The same captured real OSM data now produces a retained best-effort mission of **6,093.99 m**, maximum deviation **243.21 m**, **143.21 m** beyond the unchanged ±100 m target, graded **Out of grade**. Its 32 grouped checks comprise **7 proposed road crossings, 2 mapped indoor passages and 23 sections with uncertain access**. The result is an exploratory plan requiring on-site checks, not evidence that the whole route can be traversed. Recalculation with future map data may differ. No source data was edited to manufacture a closer route.
+
+All **87 backend tests**, Ruff, **7 frontend tests**, the TypeScript/Vite build and **18 desktop/mobile browser checks** passed. Tests cover retaining and grading a route beyond target, optional crossing connections and their geometry/reasons, exclusion in strict mode, mapped indoor passages, obstacle/foot restrictions, grade separation, GPX verification waypoints and GeoJSON metadata. Browser checks locate a proposed crossing, verify the orange-dash legend, disable/re-enable proposals and export the best-effort mission. After the walking comparison was separated from proposed links, the two affected desktop/mobile flows were rerun and passed.

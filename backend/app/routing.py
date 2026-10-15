@@ -1,6 +1,7 @@
 """OSM topology and a two-pass bottleneck-then-distance optimizer.
 
-Never join geometrically crossing ways unless OSM shares a traversable node.
+Mapped ways connect through shared traversable OSM nodes. Relaxed mode can add
+separately labelled, unverified road-crossing proposals between nearby paths.
 Unknown access is admitted only in relaxed mode and is always identified.
 """
 
@@ -28,6 +29,17 @@ FOOT_HIGHWAYS = {
     "secondary",
     "primary",
     "cycleway",
+    "corridor",
+}
+PEDESTRIAN_WAYS = {"footway", "pedestrian", "path", "steps", "cycleway", "corridor"}
+CROSSABLE_ROADS = {
+    "residential",
+    "service",
+    "unclassified",
+    "living_street",
+    "tertiary",
+    "secondary",
+    "primary",
 }
 DENIED = {"no", "private", "customers", "delivery", "permit", "destination"}
 EXPLICIT_FOOT = {"yes", "designated", "permissive", "official"}
@@ -94,7 +106,24 @@ def add_edge(graph, a, b, coords, geo, *, access, tags, way_id, off_path=False):
     )
 
 
-def build_graph(elements, geo, strict=True):
+def indoor_passage(tags):
+    return tags.get("highway") in PEDESTRIAN_WAYS and (
+        tags.get("indoor") == "yes"
+        or tags.get("highway") == "corridor"
+        or tags.get("tunnel") == "building_passage"
+    )
+
+
+def at_ground_level(tags):
+    return (
+        tags.get("bridge") in {None, "no"}
+        and tags.get("tunnel") in {None, "no"}
+        and tags.get("layer", "0") == "0"
+        and tags.get("level", "0") == "0"
+    )
+
+
+def build_graph(elements, geo, strict=True, *, allow_unverified_crossings=False):
     graph = nx.MultiGraph()
     barriers = {
         e["id"]: e.get("tags", {})
@@ -135,6 +164,9 @@ def build_graph(elements, geo, strict=True):
         if way.get("type") != "way" or tags.get("highway") not in FOOT_HIGHWAYS or "nodes" not in way:
             continue
         access = access_class(tags)
+        passage = indoor_passage(tags)
+        if passage and access != "blocked":
+            access = "uncertain"
         if access == "blocked" or (strict and access != "mapped"):
             excluded += 1
             continue
@@ -161,6 +193,8 @@ def build_graph(elements, geo, strict=True):
                     continue
                 if kind == "water" and tags.get("bridge") not in {None, "no"}:
                     continue
+                if kind == "building" and passage and not strict:
+                    continue
                 if kind in {"building", "barrier"} and tags.get("tunnel") not in {None, "no"}:
                     continue
                 if kind == "barrier" and tags.get("bridge") not in {None, "no"}:
@@ -178,9 +212,106 @@ def build_graph(elements, geo, strict=True):
                 graph.add_node(node, coord=coord)
             add_edge(graph, a, b, coords, geo, access=access, tags=tags, way_id=way["id"])
     off_path_count = 0
+    crossing_count = 0
     if not strict:
         off_path_count = add_open_space_connections(graph, elements, geo)
-    return graph, {"excluded_ways": excluded, "off_path_candidates": off_path_count}
+        if allow_unverified_crossings:
+            crossing_count = add_road_crossing_proposals(graph, elements, geo, hazards)
+    return graph, {
+        "excluded_ways": excluded,
+        "off_path_candidates": off_path_count,
+        "unverified_crossing_candidates": crossing_count,
+    }
+
+
+def add_road_crossing_proposals(graph, elements, geo, hazards):
+    """Short at-grade sidewalk-to-sidewalk proposals, explicitly requiring verification.
+
+    This augments, rather than changes, OSM shared-node topology. It never infers
+    a junction at a geometric crossing or a passage through a building footprint.
+    """
+    roads, names, blockers = [], [], list(hazards)
+    for element in elements:
+        tags = element.get("tags", {})
+        if element.get("type") == "node":
+            if "lon" in element and "barrier" in tags and not barrier_passable(tags):
+                blockers.append(Point(geo.forward.transform(element["lon"], element["lat"])).buffer(2))
+            continue
+        coords = [(p["lon"], p["lat"]) for p in element.get("geometry", [])]
+        if len(coords) < 2:
+            continue
+        line = geo.project(coords)
+        if "railway" in tags and tags.get("railway") not in {"abandoned", "razed", "dismantled"}:
+            blockers.append(line.buffer(2))
+        if "waterway" in tags:
+            blockers.append(line.buffer(1))
+        if (
+            tags.get("highway") in CROSSABLE_ROADS
+            and access_class(tags) != "blocked"
+            and at_ground_level(tags)
+        ):
+            roads.append(line)
+            names.append(tags.get("name", "road"))
+        elif "highway" in tags and (
+            access_class(tags) == "blocked"
+            or tags.get("highway") in {"motorway", "trunk", "motorway_link", "trunk_link"}
+            or not at_ground_level(tags)
+        ):
+            blockers.append(line.buffer(1))
+    if not roads:
+        return 0
+    road_tree, blocker_tree = STRtree(roads), STRtree(blockers)
+    eligible = []
+    for node, data in graph.nodes(data=True):
+        edges = [edge for group in graph[node].values() for edge in group.values()]
+        if not any(edge["tags"].get("highway") in PEDESTRIAN_WAYS for edge in edges):
+            continue
+        if any(not at_ground_level(edge["tags"]) or indoor_passage(edge["tags"]) for edge in edges):
+            continue
+        point = Point(geo.forward.transform(*data["coord"]))
+        if not road_tree.query(point.buffer(60), predicate="intersects").size:
+            continue
+        eligible.append((node, point))
+    eligible.sort(key=lambda item: (geo.line.distance(item[1]), str(item[0])))
+    eligible = eligible[:4000]
+    node_tree = STRtree([point for _, point in eligible])
+    proposals = []
+    for i, (a, point) in enumerate(eligible):
+        for j in node_tree.query(point.buffer(60), predicate="intersects"):
+            if j <= i:
+                continue
+            b, other = eligible[j]
+            if graph.has_edge(a, b) or not 2 <= point.distance(other) <= 60:
+                continue
+            coords = [graph.nodes[a]["coord"], graph.nodes[b]["coord"]]
+            link = geo.project(densify(coords, 5))
+            crossings = road_tree.query(link, predicate="crosses")
+            if not crossings.size or blocker_tree.query(link, predicate="intersects").size:
+                continue
+            proposals.append(
+                (
+                    max(geo.line.distance(point), geo.line.distance(other)),
+                    link.length,
+                    i,
+                    int(j),
+                    names[crossings[0]],
+                )
+            )
+    proposals.sort()
+    for _, _, i, j, name in proposals[:1000]:
+        a, b = eligible[i][0], eligible[j][0]
+        add_edge(
+            graph,
+            a,
+            b,
+            [graph.nodes[a]["coord"], graph.nodes[b]["coord"]],
+            geo,
+            access="uncertain",
+            tags={"connection": "unverified_road_crossing", "name": f"Cross {name}"},
+            way_id=None,
+            off_path=True,
+        )
+    return min(len(proposals), 1000)
 
 
 def add_open_space_connections(graph, elements, geo):
@@ -323,7 +454,7 @@ def bottleneck(graph, start, end):
     return None
 
 
-def shortest_edges(graph, start, end, max_deviation=math.inf):
+def shortest_edges(graph, start, end, max_deviation=math.inf, *, include_proposals=True):
     # Minimize length first, then uncertain length, within the optimal bottleneck subgraph.
     best = {start: (0.0, 0.0)}
     previous = {}
@@ -342,6 +473,8 @@ def shortest_edges(graph, start, end, max_deviation=math.inf):
             return route[::-1]
         for neighbor, edges in graph[node].items():
             for key, edge in edges.items():
+                if not include_proposals and edge.get("off_path"):
+                    continue
                 if edge["deviation"] > max_deviation + 1e-8:
                     continue
                 candidate = (
@@ -360,6 +493,7 @@ def route_stats(edges, graph, geo):
     if edges is None:
         return None
     coords, uncertain_m, unverified, surfaces = [], 0.0, 0, set()
+    checks, previous_check = [], None
     for a, _, data in edges:
         segment = data["coords"]
         if GEOD.inv(*graph.nodes[a]["coord"], *segment[0])[2] > 0.1:
@@ -368,6 +502,52 @@ def route_stats(edges, graph, geo):
         if data["access"] != "mapped":
             uncertain_m += data["length"]
             unverified += 1
+            tags = data["tags"]
+            connection = tags.get("connection")
+            if connection == "unverified_road_crossing":
+                kind, reason = (
+                    "road_crossing",
+                    "Proposed crossing: check the crossing point, median and barriers on site.",
+                )
+            elif indoor_passage(tags):
+                kind, reason = (
+                    "indoor_passage",
+                    "Check entrances, opening hours and whether through passage is available.",
+                )
+            elif connection == "open_space":
+                kind, reason = (
+                    "open_space",
+                    "Proposed open-space link: confirm the ground and passage on site.",
+                )
+            else:
+                kind, reason = (
+                    "access_unknown",
+                    "Pedestrian access or conditions are not fully established by the map tags.",
+                )
+            name = tags.get(
+                "name",
+                {"indoor_passage": "Indoor passage", "open_space": "Open-space connection"}.get(
+                    kind, "Mapped path"
+                ),
+            )
+            signature = (data["way_id"], kind, name)
+            if previous_check == signature:
+                checks[-1]["coords"].extend(segment[1:])
+                checks[-1]["distance_m"] += data["length"]
+            else:
+                checks.append(
+                    {
+                        "id": f"check-{len(checks) + 1}",
+                        "kind": kind,
+                        "name": name,
+                        "reason": reason,
+                        "coords": list(segment),
+                        "distance_m": data["length"],
+                    }
+                )
+            previous_check = signature
+        else:
+            previous_check = None
         if data["tags"].get("surface"):
             surfaces.add(data["tags"]["surface"])
     if len(coords) < 2:
@@ -388,6 +568,10 @@ def route_stats(edges, graph, geo):
             else:
                 fraction = (threshold - min(da, db)) / abs(db - da)
             within[threshold] += length * fraction
+    for check in checks:
+        points = geo.display_coords(densify(check.pop("coords"), 25))
+        check["geometry"] = {"type": "LineString", "coordinates": points}
+        check["coordinate"] = points[len(points) // 2]
     return {
         "geometry": {"type": "LineString", "coordinates": geo.display_coords(densify(coords, 25))},
         "distance_m": total,
@@ -397,6 +581,7 @@ def route_stats(edges, graph, geo):
         "within_percent": {str(t): 100 * length / total if total else 0 for t, length in within.items()},
         "uncertain_distance_m": uncertain_m,
         "unverified_sections": unverified,
+        "verification_sections": checks,
         "access": "uncertain" if unverified else "mapped",
         "surfaces": sorted(surfaces),
     }

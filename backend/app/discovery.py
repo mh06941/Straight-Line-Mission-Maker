@@ -89,7 +89,11 @@ async def run_job(job, request):
             if job["status"] == "cancelled":
                 return
             mission = MissionRequest(
-                start=a, end=b, max_deviation_m=request.max_deviation_m, strict=request.strict
+                start=a,
+                end=b,
+                max_deviation_m=request.max_deviation_m,
+                strict=request.strict,
+                allow_unverified_crossings=request.allow_unverified_crossings,
             )
             result = await asyncio.to_thread(analyse, mission, data)
             job["evaluated"] += 1
@@ -99,6 +103,7 @@ async def run_job(job, request):
                 job["results"].append(result)
                 job["results"].sort(
                     key=lambda r: (
+                        r["mission"]["corridor_compliant"] is False,
                         r["status"] != "mapped",
                         r["mission"]["max_deviation_m"],
                         len(r["obstacles"]),

@@ -167,6 +167,9 @@ def export_mission(
                         "source": "OpenStreetMap contributors",
                         "access_note": "Geographic plan only; check local access and conditions.",
                         "planned_grade": mission.get("planned_grade") if route == "mission" else None,
+                        "corridor_compliant": (mission.get(route) or {}).get("corridor_compliant"),
+                        "target_deviation_m": mission["max_deviation_m"],
+                        "verification_sections": (mission.get(route) or {}).get("verification_sections", []),
                     },
                 }
             ),
@@ -174,6 +177,13 @@ def export_mission(
             headers=headers,
         )
     root = Element("gpx", version="1.1", creator="StraightLine", xmlns="http://www.topografix.com/GPX/1/1")
+    if route == "mission":
+        for index, check in enumerate(mission["mission"].get("verification_sections", []), start=1):
+            lon, lat = check["coordinate"]
+            waypoint = SubElement(root, "wpt", lat=str(lat), lon=str((lon + 180) % 360 - 180))
+            SubElement(waypoint, "name").text = f"Check {index}: {check['name']}"
+            SubElement(waypoint, "desc").text = check["reason"]
+            SubElement(waypoint, "type").text = "On-site verification"
     track = SubElement(root, "trk")
     SubElement(track, "name").text = f"StraightLine — {route}"
     description = "Planning data, not verified safe or legal access. © OpenStreetMap contributors."
@@ -182,6 +192,13 @@ def export_mission(
         description += (
             f" Planned grade: {grade['label']}; maximum deviation {grade['max_deviation_m']:.2f} m."
             " Grade is an estimate of the planned route, not a completed traveler track."
+        )
+    if route == "mission":
+        selected = mission["mission"]
+        description += (
+            f" Target corridor: ±{mission['max_deviation_m']:g} m; "
+            f"{'within target' if selected.get('corridor_compliant') else 'exceeds target'}. "
+            f"{len(selected.get('verification_sections', []))} sections need on-site verification; see the JSON summary for locations."
         )
     SubElement(track, "desc").text = description
     segment = SubElement(track, "trkseg")

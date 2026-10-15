@@ -47,6 +47,30 @@ def test_analyse_persist_and_export(mission, network, monkeypatch):
     )
 
 
+def test_best_effort_route_exports_target_and_checks(mission, network, monkeypatch):
+    async def region(boxes):
+        return network
+
+    monkeypatch.setattr(provider, "region", region)
+    mission.max_deviation_m = 10
+    mission.strict = False
+    network["elements"][0]["tags"] = {"highway": "path"}
+    result = client.post("/api/missions/analyse", json=mission.model_dump()).json()
+    assert result["status"] == "outside_corridor"
+    assert result["mission"]["verification_sections"]
+    feature = client.get(f"/api/export/geojson/{result['id']}?route=mission").json()
+    assert feature["properties"]["corridor_compliant"] is False
+    assert feature["properties"]["target_deviation_m"] == 10
+    assert feature["properties"]["verification_sections"] == result["mission"]["verification_sections"]
+    gpx = client.get(f"/api/export/gpx/{result['id']}?route=mission")
+    assert "exceeds target" in gpx.text
+    assert "on-site verification" in gpx.text
+    waypoints = ElementTree.fromstring(gpx.content).findall(".//{*}wpt")
+    assert len(waypoints) == len(result["mission"]["verification_sections"])
+    assert waypoints[0].find("{*}name").text.startswith("Check 1:")
+    assert waypoints[0].find("{*}desc").text == result["mission"]["verification_sections"][0]["reason"]
+
+
 def test_grading_scale_and_older_saved_mission():
     scale = client.get("/api/grading").json()
     assert scale["rules"] == list(RULES)

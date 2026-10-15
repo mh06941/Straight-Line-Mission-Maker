@@ -152,6 +152,9 @@ export default function App() {
   const [length, setLength] = useState(initial?.distance_m ?? 2000);
   const [width, setWidth] = useState(initial?.max_deviation_m ?? 50);
   const [strict, setStrict] = useState(initial?.strict ?? true);
+  const [crossings, setCrossings] = useState(
+    initial?.allow_unverified_crossings ?? true,
+  );
   const [imperial, setImperial] = useState(false);
   const [pick, setPick] = useState<PickMode>(null);
   const [place, setPlace] = useState<Place | null>(null);
@@ -190,9 +193,10 @@ export default function App() {
               : { bearing, distance_m: length }),
             max_deviation_m: width,
             strict,
+            allow_unverified_crossings: crossings,
           }
         : null,
-    [start, end, method, bearing, length, width, strict],
+    [start, end, method, bearing, length, width, strict, crossings],
   );
   const paramsKey = JSON.stringify(params);
   const currentKey = useRef(paramsKey);
@@ -257,6 +261,7 @@ export default function App() {
     setLength(p.distance_m ?? 2000);
     setWidth(p.max_deviation_m);
     setStrict(p.strict);
+    setCrossings(p.allow_unverified_crossings ?? true);
     setSection("plan");
     setPick(null);
     setCollapsed(false);
@@ -325,6 +330,7 @@ export default function App() {
         max_length_m: maxDiscovery,
         max_deviation_m: width,
         strict,
+        allow_unverified_crossings: crossings,
         max_results: 5,
         terrain,
       });
@@ -350,7 +356,7 @@ export default function App() {
   const corridorControls = (
     <>
       <div className="section-heading">
-        <span>Deviation corridor</span>
+        <span>Target deviation corridor</span>
         <span className="micro-label">EACH SIDE OF THE LINE</span>
       </div>
       <div className="corridor-options">
@@ -383,35 +389,57 @@ export default function App() {
         <span>m</span>
       </label>
       <p className="field-hint">
-        A {distance(width * 2, imperial)} wide corridor. Routes must stay within{" "}
-        {distance(width, imperial)} on either side.
+        Aim for {distance(width, imperial)} on either side. If the target cannot
+        be met, show the closest available mission route and how far it exceeds
+        it.
       </p>
     </>
   );
   const accessControl = (
-    <label className="access-toggle">
-      <span>
-        <ShieldCheck size={18} />
+    <>
+      <label className="access-toggle">
         <span>
-          <strong>Mapped paths only</strong>
-          <small>
-            {strict
-              ? "Supporting pedestrian-access evidence required"
-              : "Allow uncertain ways and public-space links"}
-          </small>
+          <ShieldCheck size={18} />
+          <span>
+            <strong>Mapped paths only</strong>
+            <small>
+              {strict
+                ? "Supporting pedestrian-access evidence required"
+                : "Allow uncertain ways, indoor passages and public-space links"}
+            </small>
+          </span>
         </span>
-      </span>
-      <input
-        type="checkbox"
-        role="switch"
-        checked={strict}
-        onChange={(e) => {
-          changed();
-          setStrict(e.target.checked);
-        }}
-      />
-      <span className="switch-track" />
-    </label>
+        <input
+          type="checkbox"
+          role="switch"
+          checked={strict}
+          onChange={(e) => {
+            changed();
+            setStrict(e.target.checked);
+          }}
+        />
+        <span className="switch-track" />
+      </label>
+      {!strict && (
+        <label className="verification-option">
+          <input
+            type="checkbox"
+            checked={crossings}
+            onChange={(event) => {
+              changed();
+              setCrossings(event.target.checked);
+            }}
+          />
+          <span>
+            <strong>Propose road crossings to verify</strong>
+            <small>
+              Include short connections between mapped paths across roads,
+              marked for an on-site check.
+            </small>
+          </span>
+        </label>
+      )}
+    </>
   );
 
   return (
@@ -770,6 +798,7 @@ export default function App() {
                       analysis={analysis}
                       imperial={imperial}
                       onObstacle={selectObstacle}
+                      onLocate={setFocus}
                     />
                   )}
                   {preview && (
@@ -989,9 +1018,11 @@ export default function App() {
                         <small>
                           Max. deviation{" "}
                           {distance(r.mission!.max_deviation_m, imperial)} ·{" "}
-                          {r.status === "mapped"
-                            ? "Mapped pedestrian access"
-                            : "Uncertain access"}
+                          {r.mission?.corridor_compliant === false
+                            ? "Exceeds target corridor"
+                            : r.status === "mapped"
+                              ? "Mapped pedestrian access"
+                              : "Uncertain access"}
                         </small>
                       </span>
                       <ArrowUpRight size={17} />
@@ -1246,8 +1277,10 @@ export default function App() {
                   <p>
                     A ±50 m corridor permits 50 m of deviation on either side.
                     The red line is a WGS84 geodesic; the blue route is shortest
-                    by distance; the green route minimises its greatest
-                    deviation before breaking ties by distance.
+                    by distance without a corridor constraint; the green route
+                    minimises its greatest deviation before breaking ties by
+                    distance. If it exceeds your target, it remains visible with
+                    the excess labelled.
                   </p>
                 </section>
               </div>
@@ -1257,10 +1290,12 @@ export default function App() {
                   <h3>Read the evidence</h3>
                   <p>
                     Strict mode requires supporting pedestrian-access tags.
-                    Relaxed mode admits unknown ways and limited links inside
-                    explicitly accessible open spaces, marked uncertain.
-                    Endpoint gaps, missing fences and access changes require
-                    checking on the ground.
+                    Relaxed mode admits unknown ways, mapped indoor passages and
+                    limited links inside explicitly accessible open spaces.
+                    Optional road-crossing proposals and other uncertain
+                    sections appear as orange dashes with locations to check on
+                    site. Endpoint gaps, missing fences and access changes
+                    require checking on the ground.
                   </p>
                 </section>
               </div>
