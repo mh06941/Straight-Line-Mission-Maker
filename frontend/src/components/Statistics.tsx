@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 import type { Analysis, Obstacle } from "../types";
 import { distance } from "../lib/mission";
+import { PlannedGradeCard } from "./Grading";
 
 export default function Statistics({
   analysis,
@@ -93,6 +94,14 @@ export default function Statistics({
                 </div>
               ))}
             </div>
+            {route && analysis.planned_grade && (
+              <PlannedGradeCard grade={analysis.planned_grade} />
+            )}
+            {!route && (
+              <p className="inline-note">
+                Planned grade unavailable until a mission route is found.
+              </p>
+            )}
             {route && (
               <>
                 <div className="stat-grid">

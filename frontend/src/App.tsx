@@ -34,6 +34,7 @@ import {
 import MapView from "./components/Map";
 import Search from "./components/Search";
 import Statistics from "./components/Statistics";
+import { GradeBadge, GradeScale } from "./components/Grading";
 import { api } from "./lib/api";
 import { downloadPreview } from "./lib/export";
 import { messages as copy } from "./i18n/en";
@@ -353,7 +354,7 @@ export default function App() {
         <span className="micro-label">EACH SIDE OF THE LINE</span>
       </div>
       <div className="corridor-options">
-        {[10, 25, 50, 100, 250].map((n) => (
+        {[10, 25, 50, 75, 100, 250].map((n) => (
           <button
             key={n}
             className={width === n ? "selected" : ""}
@@ -982,6 +983,9 @@ export default function App() {
                         <strong>
                           {distance(r.distance_m, imperial)} of possibility
                         </strong>
+                        {r.planned_grade && (
+                          <GradeBadge grade={r.planned_grade} />
+                        )}
                         <small>
                           Max. deviation{" "}
                           {distance(r.mission!.max_deviation_m, imperial)} ·{" "}
@@ -1261,6 +1265,7 @@ export default function App() {
                 </section>
               </div>
             </div>
+            <GradeScale />
             <div className="help-warning">
               <Layers3 size={19} />
               <p>

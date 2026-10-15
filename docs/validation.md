@@ -4,11 +4,11 @@ This records observed results in the prepared cloud instance, not a claim that a
 
 | Check | Observed result |
 | --- | --- |
-| Backend pytest | **43 passed**, no failures; one Starlette/httpx test-client deprecation warning |
+| Backend pytest | **70 passed**, no failures; one Starlette/httpx test-client deprecation warning |
 | Ruff | Passed for application, tests and live-check script |
 | Frontend Vitest | **7 passed** in two files |
 | TypeScript + Vite production build | Passed; MapLibre and its module worker are bundled separately |
-| Playwright desktop + mobile | **6 passed**: planning/analysis/hard corridor rejection, saving/sharing/GPX export, global search/map selection/layers/help, and bounded discovery/result selection |
+| Playwright desktop + mobile | **16 passed**: planning/analysis/grades/hard corridor rejection, saving/sharing/GPX export, global search/map selection/layers/help, discovery, and development startup/worker regressions |
 | Production host API | Health, HTML root, OpenAPI docs, geodesic preview and real OSM analysis served successfully |
 | Install repeatability | Executed the saved frozen uv/npm setup and build script successfully after initial installation; lockfiles unchanged |
 | Docker Compose | Configuration validated |
@@ -61,3 +61,9 @@ The production TypeScript/Vite build and all **14 desktop/mobile browser checks*
 The installed dependency audit reproduced the user's four findings: the MapLibre sanitizer advisory, a Vitest/@vitest/mocker file-read advisory, and the Tinypool advisory propagated through Vitest. MapLibre was upgraded to **6.14.0** and Vitest to **4.1.11**, updating the lockfile. Tinypool is no longer in the dependency tree. `npm audit --json` then reported **zero vulnerabilities**; no forced audit fix, ignored advisory or integrity bypass was used.
 
 MapLibre 6's distribution is native ESM, replacing the intermediate UMD loader described above. The application lazily imports its named namespace without a default-export assumption, and Vite explicitly bundles its module worker and dependencies. This also retains the usable-planner fallback when the map download fails. The production build, seven frontend unit tests and **16 desktop/mobile browser checks** passed. The added worker check verifies messages are processed without worker errors in both development and production.
+
+## Planned grading follow-up
+
+The confirmed scale is Diamond `<10 m`, Platinum `<25 m`, Gold `<50 m`, Silver `<75 m`, Bronze `≤100 m`, then Out of grade. Backend tests exercise every exact cutoff and adjacent floating-point values, all six grades through real synthetic-network analysis, uncertain access, missing data and no-route outcomes. API checks cover the threshold endpoint, older saved analyses, discovery and GPX/GeoJSON/JSON metadata. Grading uses the unrounded generated mission maximum, independently of the selected corridor, and never assigns a grade to a missing mission route.
+
+All **70 backend tests**, **7 frontend tests**, Ruff, the TypeScript/Vite production build and **16 desktop/mobile browser checks** passed. Browser workflows verify the Gold badge for the modelled 35.05 m fixture route, all six displayed thresholds, unchanged grades under imperial display, removal of the badge when a narrower corridor has no route, discovery badges and help guidance. The development fallback checks deliberately run without an API on port 8000; the threshold request fails there while the rest of the planner and help remain usable. Production workflows use the real test API on port 8001. The dependency audit still reports **zero vulnerabilities**. Native Windows execution was not available in this cloud instance; the README now requires updating and restarting both services for this feature.

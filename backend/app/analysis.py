@@ -5,6 +5,7 @@ from shapely.geometry import LineString, Point, Polygon, mapping
 
 from .config import NUMERICAL_TOLERANCE_M
 from .geo import MissionGeometry
+from .grading import grade_deviation
 from .routing import bottleneck, build_graph, route_stats, shortest_edges, snap_endpoint
 
 
@@ -129,6 +130,7 @@ def analyse(request, data=None, provider_error=None):
         **geo.preview(request.max_deviation_m),
         "walking": None,
         "mission": None,
+        "planned_grade": None,
         "minimum_corridor_m": None,
         "status": "insufficient_data",
         "message": "Insufficient data to assess feasibility.",
@@ -213,6 +215,7 @@ def analyse(request, data=None, provider_error=None):
     edges = shortest_edges(graph, start, end, optimum)
     route = route_stats(edges, graph, geo)
     result["mission"] = route
+    result["planned_grade"] = grade_deviation(route["max_deviation_m"])
     result["status"] = "uncertain" if route["unverified_sections"] or gaps > 1 else "mapped"
     result["message"] = (
         "Route found within the corridor; access includes uncertain sections or endpoint gaps."

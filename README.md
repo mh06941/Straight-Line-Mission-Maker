@@ -14,6 +14,7 @@ Choose endpoints or a bearing and distance, preview a WGS84 geodesic and deviati
 - Two-pass bottleneck routing: smallest modelled maximum deviation, followed by shortest distance and access-confidence tie-breaking. The requested corridor is a hard limit and is never expanded automatically.
 - Relaxed routing admits uncertain paths and bounded visibility connections inside explicitly accessible open-space polygons, avoiding mapped obstacles. These links remain unverified.
 - Mapped obstacle intersections, feature layers, distance-weighted deviation statistics, corridor percentages and partial difficulty with an explicit formula.
+- Planned maximum-deviation grades from Diamond to Bronze, plus Out of grade, with threshold guidance and export metadata.
 - Bounded discovery in a map-drawn rectangle: one regional query, up to 24 candidate lines, ranked results, progress and cancellation.
 - Local saved mission parameters, parameter-based share URLs, GPX/GeoJSON exports and downloadable JSON summaries.
 - Responsive desktop sidebar/mobile sheet, accessible dialogs, helpful loading/error states, OpenAPI docs and automated tests.
@@ -62,18 +63,28 @@ Optional settings: `Copy-Item .env.example .env` from the repository root. uv ma
 
 If the frontend is blank with a MapLibre `default`-export error, install the current code rather than changing the import alone. The patched MapLibre 6 engine uses native named ESM exports with a separately bundled module worker; it does not assume a default export. A map-load failure shows a message while leaving the planner usable.
 
-For an existing Git checkout, stop the frontend, run `git pull origin main`, and restart with `npm run dev -- --force`. If the folder was downloaded as a ZIP, it is not a Git checkout. With Git installed, create a fresh clone in a separate folder:
+For an existing Git checkout, stop **both the frontend and backend**, run `git pull origin main` from the repository root, then `uv sync --frozen` in `backend` and `npm ci` in `frontend`. Restart both using the commands above; use `npm run dev -- --force` to refresh Vite's dependency cache. The grade display requires the updated API as well as the frontend.
+
+If the folder was downloaded as a ZIP, it is not a Git checkout. With Git installed, create a fresh clone in a separate folder:
 
 ```powershell
-# Stop the frontend with Ctrl+C first. The existing backend can keep running.
+# Stop the frontend and backend with Ctrl+C in their terminals first.
 Set-Location $env:USERPROFILE
 git clone https://github.com/mh06941/Straight-Line-Mission-Maker.git StraightLine-updated
-Set-Location StraightLine-updated\frontend
+Set-Location StraightLine-updated\backend
+uv sync --frozen
+uv run uvicorn app.main:app --reload --port 8000
+```
+
+In another PowerShell terminal:
+
+```powershell
+Set-Location "$env:USERPROFILE\StraightLine-updated\frontend"
 npm ci
 npm run dev -- --force
 ```
 
-Use the Local address printed by Vite and hard-refresh with Ctrl+Shift+R. Subsequent updates can use `git pull origin main` from this clone. When restarting the backend later, run `uv sync --frozen` and the API startup command from the new clone's `backend` directory.
+Use the Local address printed by Vite and hard-refresh with Ctrl+Shift+R. Subsequent updates can use `git pull origin main` from this clone, followed by the dependency installation and restart steps above.
 
 ## Try a mission
 
@@ -85,6 +96,23 @@ Use the Local address printed by Vite and hard-refresh with Ctrl+Shift+R. Subseq
 6. Save, share or export. Browser saves retain parameters, not a promise that a route will remain accessible.
 
 Discovery: zoom into a small area, open **Discover**, and click two rectangle corners. Keep the area below 64 km². Public API work is bounded; a search is a candidate sample, not exhaustive optimisation.
+
+## Planned mission grades
+
+The generated mission route receives a grade from its **unrounded maximum deviation** from the ideal geodesic. The corridor is a routing limit; changing it does not directly set the grade.
+
+| Grade | Maximum deviation |
+| --- | --- |
+| Diamond | Under 10 m |
+| Platinum | 10 m to under 25 m |
+| Gold | 25 m to under 50 m |
+| Silver | 50 m to under 75 m |
+| Bronze | 75 m through 100 m, inclusive |
+| Out of grade | Over 100 m |
+
+Grades appear in analysis and discovery, and are included in mission GPX/GeoJSON exports and the JSON summary. **How it works** and **View grading thresholds** show the scale. Metres are authoritative even when display units are imperial. No mission route means no grade; ideal previews and walking comparisons are ungraded. Existing stored analyses receive a grade when loaded from their recorded route maximum.
+
+This is a planning estimate from mapped geometry, including the model's conservative numerical guard. Mapping accuracy, endpoint gaps and legal access still need checking. Grading a completed mission would require a recorded traveler track; track import and validation are not implemented.
 
 ## Verification
 
@@ -121,6 +149,7 @@ backend/app/
   providers.py     public providers, throttling, retries and cache use
   routing.py       topology, access, snapping and two-pass minimax routing
   analysis.py      obstacle intersections, metrics and uncertainty
+  grading.py       maximum-deviation thresholds for planned mission routes
   discovery.py     bounded background jobs and ranking
   storage.py       SQLite provider cache and mission records
 backend/tests/     deterministic geographical, API and routing tests

@@ -46,6 +46,20 @@ export interface Obstacle {
   confidence: string;
   crossing_infrastructure_nearby: boolean;
 }
+export interface GradeRule {
+  tier: "diamond" | "platinum" | "gold" | "silver" | "bronze" | "out_of_grade";
+  label: string;
+  cutoff_m: number | null;
+  inclusive: boolean;
+  range: string;
+}
+export interface PlannedGrade extends GradeRule {
+  max_deviation_m: number;
+}
+export interface GradingScale {
+  rules: GradeRule[];
+  note: string;
+}
 export interface Analysis extends Preview {
   id: string;
   created_at: string;
@@ -54,6 +68,7 @@ export interface Analysis extends Preview {
   message: string;
   walking: Route | null;
   mission: Route | null;
+  planned_grade?: PlannedGrade | null;
   minimum_corridor_m: number | null;
   warnings: string[];
   features: FeatureCollection;

@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from . import discovery, storage
 from .analysis import analyse
 from .geo import MissionGeometry
+from .grading import RULES, grade_deviation
 from .models import DiscoveryRequest, MissionRequest
 from .providers import ProviderError, provider
 
@@ -46,6 +47,17 @@ app.add_middleware(
 @app.get("/api/health")
 def health():
     return {"status": "ok", "version": "0.1.0", "elevation": "unavailable", "data_source": "OpenStreetMap"}
+
+
+@app.get("/api/grading")
+def grading_scale():
+    """Tiered grading of a generated mission's maximum deviation, in metres."""
+    return {
+        "metric": "max_deviation_m",
+        "scope": "planned_mission_route",
+        "rules": RULES,
+        "note": "Planning estimate from unrounded modelled maximum deviation. A completed mission requires a recorded traveler track.",
+    }
 
 
 @app.get("/api/geocode")
@@ -92,6 +104,8 @@ def get_mission(mission_id: str):
     result = storage.load_mission(mission_id)
     if result is None:
         raise HTTPException(404, "Mission not found. Shared parameters can be used to rebuild it.")
+    # Older saved analyses already contain the metric needed by the grading scale.
+    result["planned_grade"] = grade_deviation((result.get("mission") or {}).get("max_deviation_m"))
     return result
 
 
@@ -152,6 +166,7 @@ def export_mission(
                         "route": route,
                         "source": "OpenStreetMap contributors",
                         "access_note": "Geographic plan only; check local access and conditions.",
+                        "planned_grade": mission.get("planned_grade") if route == "mission" else None,
                     },
                 }
             ),
@@ -161,9 +176,14 @@ def export_mission(
     root = Element("gpx", version="1.1", creator="StraightLine", xmlns="http://www.topografix.com/GPX/1/1")
     track = SubElement(root, "trk")
     SubElement(track, "name").text = f"StraightLine — {route}"
-    SubElement(
-        track, "desc"
-    ).text = "Planning data, not verified safe or legal access. © OpenStreetMap contributors."
+    description = "Planning data, not verified safe or legal access. © OpenStreetMap contributors."
+    if route == "mission" and mission.get("planned_grade"):
+        grade = mission["planned_grade"]
+        description += (
+            f" Planned grade: {grade['label']}; maximum deviation {grade['max_deviation_m']:.2f} m."
+            " Grade is an estimate of the planned route, not a completed traveler track."
+        )
+    SubElement(track, "desc").text = description
     segment = SubElement(track, "trkseg")
     for lon, lat in geometry["coordinates"]:
         SubElement(segment, "trkpt", lat=str(lat), lon=str((lon + 180) % 360 - 180))

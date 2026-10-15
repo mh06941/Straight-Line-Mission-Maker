@@ -43,6 +43,9 @@ test("bounded discovery selects a real analysed candidate", async ({
   await expect(
     page.getByText("Search complete", { exact: true }),
   ).toBeVisible();
+  await expect(
+    page.locator(".discovery-card .grade-badge").first(),
+  ).toBeVisible();
   await page.locator(".discovery-card").first().click();
   await expect(
     page.getByRole("region", { name: "Mission analysis" }),
@@ -76,11 +79,23 @@ test("plan, analyse, respect corridor, save, share and export", async ({
   await expect(
     page.getByText("1.00 km", { exact: true }).first(),
   ).toBeVisible();
+  const grade = page.getByRole("region", { name: "Planned mission grade" });
+  await expect(grade).toHaveCount(0);
   await page.getByRole("button", { name: "Analyse mission" }).click();
   await expect(page.getByText("A line worth exploring")).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Mission analysis" }),
   ).toContainText("35 m");
+  await expect(grade.locator(".grade-badge")).toHaveText("Gold");
+  await expect(grade).toContainText("35.05 m");
+  await grade.getByText("View grading thresholds").click();
+  await expect(
+    grade.getByRole("region", { name: "Planned grading thresholds" }),
+  ).toContainText("75 to 100 m inclusive");
+  await expect(grade.locator("dt")).toHaveCount(6);
+  await page.getByRole("button", { name: /Units: metric/ }).click();
+  await expect(grade.locator(".grade-badge")).toHaveText("Gold");
+  await page.getByRole("button", { name: /Units: imperial/ }).click();
   await page.getByRole("button", { name: "Save mission", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Mission name" })
@@ -106,6 +121,10 @@ test("plan, analyse, respect corridor, save, share and export", async ({
   await page.getByRole("button", { name: "Analyse mission" }).click();
   await expect(
     page.getByText("No route within this corridor", { exact: true }),
+  ).toBeVisible();
+  await expect(grade).toHaveCount(0);
+  await expect(
+    page.getByText("Planned grade unavailable until a mission route is found."),
   ).toBeVisible();
   await page
     .getByRole("navigation")
@@ -168,6 +187,11 @@ test("worldwide search, map picks, layers and help remain usable", async ({
     page.getByRole("button", { name: "Drag start point" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "How it works" }).click();
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("region", { name: "Planned grading thresholds" }),
+  ).toContainText("Under 10 m");
   await expect(page.getByRole("dialog")).toContainText(
     "green route minimises its greatest deviation",
   );

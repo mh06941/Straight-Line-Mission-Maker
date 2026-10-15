@@ -915,6 +915,105 @@ h1 {
   border-top: 1px solid var(--line);
   border-left: 1px solid var(--line);
 }
+.planned-grade {
+  margin: 0 0 22px;
+  padding: 16px;
+  border: 1px solid #d8e1d2;
+  border-radius: 8px;
+  background: #f2f6eb;
+}
+.planned-grade-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.planned-grade h3,
+.grade-scale h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.grade-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid currentColor;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.grade-diamond {
+  color: #205b74;
+  background: #e3f3f8;
+}
+.grade-platinum {
+  color: #405b62;
+  background: #e7f0ef;
+}
+.grade-gold {
+  color: #725112;
+  background: #fbf0cc;
+}
+.grade-silver {
+  color: #4a5360;
+  background: #eceff3;
+}
+.grade-bronze {
+  color: #7c4629;
+  background: #f9e9db;
+}
+.grade-out_of_grade {
+  color: #874238;
+  background: #fae9e5;
+}
+.planned-grade p,
+.grade-scale p {
+  font-size: 11px;
+  line-height: 1.7;
+  margin: 12px 0;
+}
+.grade-range {
+  display: block;
+  color: #5e6b56;
+}
+.planned-grade .grade-note,
+.grade-scale p {
+  color: #5e6b56;
+}
+.planned-grade summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 500;
+}
+.grade-scale {
+  margin: 22px 0;
+}
+.grade-scale dl {
+  margin: 12px 0;
+}
+.grade-scale dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+}
+.grade-scale dt {
+  font-weight: 600;
+}
+.grade-scale dd {
+  margin: 0;
+  text-align: right;
+}
+.discovery-card .grade-badge {
+  margin-top: 8px;
+}
 .stat-grid > div {
   padding: 15px 10px;
   border-right: 1px solid var(--line);

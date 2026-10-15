@@ -38,6 +38,14 @@ Lengths use WGS84 geodesics. Average deviation integrates the trapezoidal sample
 
 Difficulty is explicitly partial: `clamp(1 + distance_m/5000 + 0.12*intersection_count + min(3, uncertain_m/250), 1, 10)`. Elevation, gradients, terrain risk and unmapped barriers are unknown. No score is issued when no mission route is found.
 
+## Planned maximum-deviation grading
+
+`grading.py` classifies the mission route's unrounded `max_deviation_m`, including the existing 0.05 m conservative guard: Diamond `<10`, Platinum `<25`, Gold `<50`, Silver `<75`, Bronze `≤100`, otherwise Out of grade. Each check is evaluated in that order. Exactly 10/25/50/75 m enters the next tier; exactly 100 m remains Bronze. Display rounding and imperial conversion do not affect classification. The numerical tolerance and source mapping accuracy still apply near cutoffs.
+
+The API returns `planned_grade` separately from feasibility, access confidence and partial difficulty. A route beyond 100 m can remain corridor-compliant but out of grade. Missing data or no mission route yields `null`, even when an ideal line or walking comparison is available. Discovery uses the same analysis function. `GET /api/grading` supplies the authoritative scale to the UI. Loading older stored analyses calculates a grade from the saved mission maximum without altering their route geometry. Mission GeoJSON/GPX and JSON summary exports retain the estimate; ideal and walking route exports do not carry a mission grade.
+
+Only the generated network path is assessed, excluding unassessed endpoint gaps as with other route statistics. No recorded traveler track is evaluated, so this feature does not certify a completed mission grade.
+
 ## Discovery
 
 A ≤64 km² rectangle is downloaded once. Up to 100 mapped nodes are sampled deterministically, candidate pairs in the requested length range are shuffled, and at most 24 are analysed. Surface preference filters endpoint candidates by mapped tags; it does not constrain every intermediate segment or infer elevation. At most five UI results are retained (API supports ten). Ranking prefers mapped status, then lower bottleneck, fewer mapped intersections and shorter distance. Cancellation stops between bounded candidates; an in-flight provider request or CPU candidate may complete. Jobs are process-local and expire after one hour when a later search starts.
